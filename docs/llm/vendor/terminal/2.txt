@@ -1,0 +1,766 @@
+kushal@fedora:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground/; date; cat scripts/export.sh; time bash scripts/export.sh; cat scripts/test.sh; time bash scripts/test.sh; date;
+Thu Nov 19 06:28:13 AM EST 2026
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+PROJECT_PATH="${1:-$SCRIPT_DIR/..}"
+OUTPUT_FILE="${2:-docs/llm/dump.txt}"
+
+INCLUDE_EXTENSIONS="cs csproj slnx props targets json razor js mjs css html svg yml yaml sh md toml sql"
+INCLUDE_NAMES=".gitignore .gitattributes .editorconfig .dockerignore .env.example Containerfile"
+EXCLUDE_NAMES="package-lock.json LICENSE"
+EXCLUDE_DIRS="bin obj .vs .git node_modules .vscode .idea TestResults artifacts coverage"
+EXCLUDE_PREFIXES="docs/llm/"
+
+PROJECT_PATH="$(cd "$PROJECT_PATH" && pwd)"
+cd "$PROJECT_PATH"
+
+case "$OUTPUT_FILE" in
+    /*) OUTPUT_PATH="$OUTPUT_FILE" ;;
+    *)  OUTPUT_PATH="$PROJECT_PATH/$OUTPUT_FILE" ;;
+esac
+OUTPUT_DIR="$(dirname "$OUTPUT_PATH")"
+mkdir -p "$OUTPUT_DIR"
+
+OUTPUT_REL="${OUTPUT_PATH#"$PROJECT_PATH"/}"
+
+if [ -t 1 ]; then
+    GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+else
+    GREEN=''; YELLOW=''; CYAN=''; NC=''
+fi
+log() { printf "%b%s%b\n" "$1" "$2" "$NC"; }
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        printf 'unavailable'
+    fi
+}
+
+mod_time_utc_of() {
+    local epoch
+    if epoch="$(stat -c '%Y' "$1" 2>/dev/null)"; then
+        date -u -d "@$epoch" '+%Y-%m-%d %H:%M:%S'
+    else
+        epoch="$(stat -f '%m' "$1")"
+        date -u -r "$epoch" '+%Y-%m-%d %H:%M:%S'
+    fi
+}
+
+line_count_of() {
+    awk 'END { print NR }' "$1"
+}
+
+is_included_file() {
+    local name="${1##*/}" ext entry
+    for entry in $EXCLUDE_NAMES; do
+        [ "$name" = "$entry" ] && return 1
+    done
+    case "$name" in
+        .env.example) return 0 ;;
+        .env|.env.*) return 1 ;;
+    esac
+    for entry in $INCLUDE_NAMES; do
+        [ "$name" = "$entry" ] && return 0
+    done
+    ext="${name##*.}"
+    [ "$ext" != "$name" ] || return 1
+    ext="$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')"
+    for entry in $INCLUDE_EXTENSIONS; do
+        [ "$ext" = "$entry" ] && return 0
+    done
+    return 1
+}
+
+is_excluded_path() {
+    local path="$1" entry
+    for entry in $EXCLUDE_PREFIXES; do
+        case "$path" in
+            "$entry"*) return 0 ;;
+        esac
+    done
+    for entry in $EXCLUDE_DIRS; do
+        case "$path" in
+            "$entry"/*|*/"$entry"/*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+is_text() {
+    [ ! -s "$1" ] || grep -Iq . "$1"
+}
+
+in_git_repo() { git rev-parse --is-inside-work-tree >/dev/null 2>&1; }
+
+render_tree() {
+    local -a parts prev
+    local rel n common i j indent
+    prev=()
+    echo "."
+    while IFS= read -r -d '' rel; do
+        IFS='/' read -r -d '' -a parts < <(printf '%s\0' "$rel") || true
+        n=${#parts[@]}
+
+        common=0
+        while [ "$common" -lt $((n - 1)) ] && [ "$common" -lt "${#prev[@]}" ] \
+              && [ "${parts[$common]}" = "${prev[$common]}" ]; do
+            common=$((common + 1))
+        done
+
+        for ((i = common; i < n; i++)); do
+            indent="    "
+            for ((j = 0; j < i; j++)); do indent="$indent    "; done
+            if [ "$i" -lt $((n - 1)) ]; then
+                printf '%s%s/\n' "$indent" "${parts[$i]}"
+            else
+                printf '%s%s\n' "$indent" "${parts[$i]}"
+            fi
+        done
+
+        if [ "$n" -gt 1 ]; then
+            prev=("${parts[@]:0:$((n - 1))}")
+        else
+            prev=()
+        fi
+    done < "$FILE_LIST"
+}
+
+log "$GREEN" "Starting project export..."
+log "$YELLOW" "Project Path: $PROJECT_PATH"
+log "$YELLOW" "Output File:  $OUTPUT_PATH"
+
+RAW_LIST="$(mktemp)"
+FILE_LIST="$(mktemp)"
+TMP_OUTPUT=""
+cleanup() { rm -f "$RAW_LIST" "$FILE_LIST" ${TMP_OUTPUT:+"$TMP_OUTPUT"}; }
+trap cleanup EXIT
+
+if in_git_repo; then
+    log "$CYAN" "Listing files via git..."
+    git ls-files -z --cached --others --exclude-standard > "$RAW_LIST"
+else
+    log "$YELLOW" "Not a git repo; falling back to find..."
+    find . -type f -print0 > "$RAW_LIST"
+fi
+
+while IFS= read -r -d '' file; do
+    rel="${file#./}"
+    [ "$rel" = "$OUTPUT_REL" ] && continue
+    is_excluded_path "$rel" && continue
+    is_included_file "$rel" || continue
+    [ -f "$rel" ] || continue
+    is_text "$rel" || continue
+    printf '%s\0' "$rel"
+done < "$RAW_LIST" | LC_ALL=C sort -z -u > "$FILE_LIST"
+
+FILE_COUNT=0
+while IFS= read -r -d '' _; do FILE_COUNT=$((FILE_COUNT + 1)); done < "$FILE_LIST"
+log "$GREEN" "Found $FILE_COUNT files to export"
+
+GIT_COMMIT="n/a"; GIT_BRANCH="n/a"; GIT_DIRTY="n/a"
+if in_git_repo; then
+    commit="$(git rev-parse --verify --quiet HEAD 2>/dev/null || true)"
+    [ -n "$commit" ] && GIT_COMMIT="$commit"
+    branch="$(git branch --show-current 2>/dev/null || true)"
+    [ -n "$branch" ] && GIT_BRANCH="$branch"
+
+    status_args=(status --porcelain -- . ":(exclude)$OUTPUT_REL")
+    if [ -n "$(git "${status_args[@]}" 2>/dev/null || true)" ]; then
+        GIT_DIRTY="yes (uncommitted changes are included below)"
+    else
+        GIT_DIRTY="no"
+    fi
+fi
+DOTNET_VERSION="$(dotnet --version 2>/dev/null || echo 'not installed')"
+
+TMP_OUTPUT="$(mktemp "$OUTPUT_DIR/.export.XXXXXX")"
+
+{
+    echo "==============================================================================="
+    echo "PROJECT EXPORT"
+    echo "Generated (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+    echo "Project Path:    $PROJECT_PATH"
+    echo "Git Commit:      $GIT_COMMIT"
+    echo "Git Branch:      $GIT_BRANCH"
+    echo "Git Dirty:       $GIT_DIRTY"
+    echo ".NET SDK:        $DOTNET_VERSION"
+    echo "Files Exported:  $FILE_COUNT"
+    echo "==============================================================================="
+    echo
+    echo "DIRECTORY STRUCTURE (exported files only):"
+    echo "=========================================="
+    echo
+    render_tree
+    printf '\n\n'
+    echo "FILE CONTENTS:"
+    echo "=============="
+    echo
+} > "$TMP_OUTPUT"
+
+TOTAL_BYTES=0
+CURRENT=0
+while IFS= read -r -d '' rel; do
+    CURRENT=$((CURRENT + 1))
+    full="$PROJECT_PATH/$rel"
+
+    size="$(wc -c < "$full" | tr -d ' ')"
+    lines="$(line_count_of "$full")"
+    size_kb="$(awk "BEGIN {printf \"%.2f\", $size / 1024}")"
+    hash="$(sha256_of "$full")"
+    modified="$(mod_time_utc_of "$full")"
+    TOTAL_BYTES=$((TOTAL_BYTES + size))
+
+    log "$CYAN" "Processing ($CURRENT/$FILE_COUNT): $rel"
+
+    {
+        echo "================================================================================"
+        echo "FILE:     $rel"
+        echo "SIZE:     ${size_kb} KB (${size} bytes)"
+        echo "LINES:    $lines"
+        echo "SHA256:   $hash"
+        echo "MODIFIED: $modified (UTC)"
+        echo "================================================================================"
+        echo
+    } >> "$TMP_OUTPUT"
+
+    if [ -s "$full" ]; then
+        cat "$full" >> "$TMP_OUTPUT" 2>/dev/null || echo "[ERROR READING FILE]" >> "$TMP_OUTPUT"
+    else
+        echo "[EMPTY FILE]" >> "$TMP_OUTPUT"
+    fi
+
+    printf '\n\n' >> "$TMP_OUTPUT"
+done < "$FILE_LIST"
+
+TOTAL_MB="$(awk "BEGIN {printf \"%.2f\", $TOTAL_BYTES / 1048576}")"
+
+{
+    echo "==============================================================================="
+    echo "EXPORT COMPLETED (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+    echo "Total Files Exported:   $FILE_COUNT"
+    echo "Total Source Size:      ${TOTAL_MB} MB (${TOTAL_BYTES} bytes)"
+    echo "Output File:            $OUTPUT_PATH"
+    echo "==============================================================================="
+} >> "$TMP_OUTPUT"
+
+DUMP_HASH="$(sha256_of "$TMP_OUTPUT")"
+echo "DUMP SHA256 (of all lines above this one): $DUMP_HASH" >> "$TMP_OUTPUT"
+
+chmod 0644 "$TMP_OUTPUT"
+mv -f "$TMP_OUTPUT" "$OUTPUT_PATH"
+TMP_OUTPUT=""
+
+log "$GREEN" ""
+log "$GREEN" "Export completed successfully!"
+log "$YELLOW" "Output file: $OUTPUT_PATH"
+log "$CYAN" "Total source size: ${TOTAL_MB} MB across ${FILE_COUNT} files"
+Starting project export...
+Project Path: /home/kushal/src/dotnet/myblazorplayground
+Output File:  /home/kushal/src/dotnet/myblazorplayground/docs/llm/dump.txt
+Listing files via git...
+Found 358 files to export
+Processing (1/358): .dockerignore
+Processing (2/358): .editorconfig
+Processing (3/358): .env.example
+Processing (4/358): .gitattributes
+Processing (5/358): .github/dependabot.yml
+Processing (6/358): .github/workflows/ci.yml
+Processing (7/358): .gitignore
+Processing (8/358): Containerfile
+Processing (9/358): Directory.Build.props
+Processing (10/358): Directory.Packages.props
+Processing (11/358): MyBlazorPlayground.slnx
+Processing (12/358): README.md
+Processing (13/358): REUSE.toml
+Processing (14/358): compose.yaml
+Processing (15/358): docs/adr/0001-record-decisions.md
+Processing (16/358): docs/adr/0002-solution-layout.md
+Processing (17/358): docs/adr/0003-rendering-model.md
+Processing (18/358): docs/adr/0004-data-access.md
+Processing (19/358): docs/adr/0005-accounts.md
+Processing (20/358): docs/adr/0006-roles-and-deletion.md
+Processing (21/358): docs/adr/0007-homes-in-postgresql.md
+Processing (22/358): docs/adr/0008-toys-stay-in-memory.md
+Processing (23/358): docs/adr/0009-rich-text-and-files.md
+Processing (24/358): docs/adr/0010-hosting.md
+Processing (25/358): docs/adr/0011-security.md
+Processing (26/358): docs/adr/0012-testing.md
+Processing (27/358): docs/adr/0013-dependencies.md
+Processing (28/358): docs/adr/README.md
+Processing (29/358): docs/adr/homes/0004-entries-and-handshake.md
+Processing (30/358): docs/adr/homes/0005-listing-identity-and-merge.md
+Processing (31/358): docs/adr/homes/0006-links-and-keys.md
+Processing (32/358): docs/adr/homes/0007-details.md
+Processing (33/358): docs/adr/homes/0008-local-storage.md
+Processing (34/358): docs/adr/homes/0009-realtime-delivery.md
+Processing (35/358): docs/adr/toys/0004-message-ids-and-reconciliation.md
+Processing (36/358): docs/adr/toys/0005-local-history.md
+Processing (37/358): docs/adr/toys/0006-canvas-protocol.md
+Processing (38/358): docs/adr/toys/0007-realtime-delivery.md
+Processing (39/358): docs/adr/toys/0019-slots.md
+Processing (40/358): docs/adr/toys/0020-latency.md
+Processing (41/358): docs/adr/toys/0021-server-clock.md
+Processing (42/358): docs/adr/toys/0022-message-details.md
+Processing (43/358): docs/adr/toys/0023-postcards.md
+Processing (44/358): docs/adr/toys/0024-reading.md
+Processing (45/358): global.json
+Processing (46/358): scripts/dev.sh
+Processing (47/358): scripts/export.sh
+Processing (48/358): scripts/instance.sh
+Processing (49/358): scripts/lib.sh
+Processing (50/358): scripts/test.sh
+Processing (51/358): src/MyBlazorPlayground.Data/Audit/AuditLog.cs
+Processing (52/358): src/MyBlazorPlayground.Data/Database.cs
+Processing (53/358): src/MyBlazorPlayground.Data/MigrationRunner.cs
+Processing (54/358): src/MyBlazorPlayground.Data/Migrations/0001_initial.sql
+Processing (55/358): src/MyBlazorPlayground.Data/Migrations/0002_event_order.sql
+Processing (56/358): src/MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj
+Processing (57/358): src/MyBlazorPlayground.Data/Nest/NestEntryStore.cs
+Processing (58/358): src/MyBlazorPlayground.Data/Pages/PageEditorStore.cs
+Processing (59/358): src/MyBlazorPlayground.Data/People/PersonStore.cs
+Processing (60/358): src/MyBlazorPlayground.Data/Protection/DataProtectionKeyStore.cs
+Processing (61/358): src/MyBlazorPlayground.Data/Settings/SiteSettings.cs
+Processing (62/358): src/MyBlazorPlayground.Data/Trash/Deletions.cs
+Processing (63/358): src/MyBlazorPlayground.Data/Work/AttachmentStore.cs
+Processing (64/358): src/MyBlazorPlayground.Data/Work/CommentStore.cs
+Processing (65/358): src/MyBlazorPlayground.Data/Work/ProjectStore.cs
+Processing (66/358): src/MyBlazorPlayground.Data/Work/SprintStore.cs
+Processing (67/358): src/MyBlazorPlayground.Data/Work/WorkItemStore.cs
+Processing (68/358): src/MyBlazorPlayground.Domain/Access/AccessPolicy.cs
+Processing (69/358): src/MyBlazorPlayground.Domain/Access/Actor.cs
+Processing (70/358): src/MyBlazorPlayground.Domain/Access/PageRoles.cs
+Processing (71/358): src/MyBlazorPlayground.Domain/Access/SiteRoles.cs
+Processing (72/358): src/MyBlazorPlayground.Domain/Accounts/AccountRules.cs
+Processing (73/358): src/MyBlazorPlayground.Domain/Files/FileRules.cs
+Processing (74/358): src/MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj
+Processing (75/358): src/MyBlazorPlayground.Domain/Security/PasswordHasher.cs
+Processing (76/358): src/MyBlazorPlayground.Domain/Security/SetupCode.cs
+Processing (77/358): src/MyBlazorPlayground.Domain/Text/PlainText.cs
+Processing (78/358): src/MyBlazorPlayground.Domain/Text/RichText.cs
+Processing (79/358): src/MyBlazorPlayground.Domain/Work/Priorities.cs
+Processing (80/358): src/MyBlazorPlayground.Domain/Work/SprintStates.cs
+Processing (81/358): src/MyBlazorPlayground.Domain/Work/WorkItemKinds.cs
+Processing (82/358): src/MyBlazorPlayground.Domain/Work/WorkItemStatuses.cs
+Processing (83/358): src/MyBlazorPlayground.Domain/Work/WorkRules.cs
+Processing (84/358): src/MyBlazorPlayground.Web/Administration/Audits.cs
+Processing (85/358): src/MyBlazorPlayground.Web/Administration/TrashService.cs
+Processing (86/358): src/MyBlazorPlayground.Web/Chaos/ChaosOptions.cs
+Processing (87/358): src/MyBlazorPlayground.Web/Chaos/ChaosRegistration.cs
+Processing (88/358): src/MyBlazorPlayground.Web/Chaos/Drawing/CanvasService.cs
+Processing (89/358): src/MyBlazorPlayground.Web/Chaos/Drawing/CanvasSession.cs
+Processing (90/358): src/MyBlazorPlayground.Web/Chaos/Drawing/CanvasUpdate.cs
+Processing (91/358): src/MyBlazorPlayground.Web/Chaos/Drawing/DrawReply.cs
+Processing (92/358): src/MyBlazorPlayground.Web/Chaos/Drawing/DrawResult.cs
+Processing (93/358): src/MyBlazorPlayground.Web/Chaos/Drawing/ICanvasSubscriber.cs
+Processing (94/358): src/MyBlazorPlayground.Web/Chaos/Drawing/ResetResult.cs
+Processing (95/358): src/MyBlazorPlayground.Web/Chaos/Drawing/Stroke.cs
+Processing (96/358): src/MyBlazorPlayground.Web/Chaos/Drawing/StrokeOffer.cs
+Processing (97/358): src/MyBlazorPlayground.Web/Chaos/Latency/HttpLatencyProbe.cs
+Processing (98/358): src/MyBlazorPlayground.Web/Chaos/Latency/ILatencyProbe.cs
+Processing (99/358): src/MyBlazorPlayground.Web/Chaos/Latency/ILatencySubscriber.cs
+Processing (100/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyCatalog.cs
+Processing (101/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyEndpoint.cs
+Processing (102/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyLeaders.cs
+Processing (103/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyRun.cs
+Processing (104/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyService.cs
+Processing (105/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyStart.cs
+Processing (106/358): src/MyBlazorPlayground.Web/Chaos/Latency/LatencyUpdate.cs
+Processing (107/358): src/MyBlazorPlayground.Web/Chaos/Messages/BoardMessage.cs
+Processing (108/358): src/MyBlazorPlayground.Web/Chaos/Messages/BoardService.cs
+Processing (109/358): src/MyBlazorPlayground.Web/Chaos/Messages/BoardUpdate.cs
+Processing (110/358): src/MyBlazorPlayground.Web/Chaos/Messages/IBoardSubscriber.cs
+Processing (111/358): src/MyBlazorPlayground.Web/Chaos/Messages/MessageFormat.cs
+Processing (112/358): src/MyBlazorPlayground.Web/Chaos/Messages/MessageMeta.cs
+Processing (113/358): src/MyBlazorPlayground.Web/Chaos/Messages/MessageText.cs
+Processing (114/358): src/MyBlazorPlayground.Web/Chaos/Messages/MessageWindow.cs
+Processing (115/358): src/MyBlazorPlayground.Web/Chaos/Messages/MetaEntry.cs
+Processing (116/358): src/MyBlazorPlayground.Web/Chaos/Messages/MetaField.cs
+Processing (117/358): src/MyBlazorPlayground.Web/Chaos/Messages/PostReply.cs
+Processing (118/358): src/MyBlazorPlayground.Web/Chaos/Messages/PostResult.cs
+Processing (119/358): src/MyBlazorPlayground.Web/Chaos/Postcards/CleanImage.cs
+Processing (120/358): src/MyBlazorPlayground.Web/Chaos/Postcards/IPostcardSubscriber.cs
+Processing (121/358): src/MyBlazorPlayground.Web/Chaos/Postcards/ImageSanitizer.cs
+Processing (122/358): src/MyBlazorPlayground.Web/Chaos/Postcards/Postcard.cs
+Processing (123/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardEndpoint.cs
+Processing (124/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardImage.cs
+Processing (125/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardReply.cs
+Processing (126/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardResult.cs
+Processing (127/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardRules.cs
+Processing (128/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardSent.cs
+Processing (129/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardService.cs
+Processing (130/358): src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardUpdate.cs
+Processing (131/358): src/MyBlazorPlayground.Web/Chaos/Reading/Article.cs
+Processing (132/358): src/MyBlazorPlayground.Web/Chaos/Reading/ArticleBlock.cs
+Processing (133/358): src/MyBlazorPlayground.Web/Chaos/Reading/ArticleEntry.cs
+Processing (134/358): src/MyBlazorPlayground.Web/Chaos/Reading/ArticleLibrary.cs
+Processing (135/358): src/MyBlazorPlayground.Web/Chaos/Reading/ArticleText.cs
+Processing (136/358): src/MyBlazorPlayground.Web/Chaos/Reading/RandomArticle.cs
+Processing (137/358): src/MyBlazorPlayground.Web/Chaos/Slots/ISlotSubscriber.cs
+Processing (138/358): src/MyBlazorPlayground.Web/Chaos/Slots/SlotPress.cs
+Processing (139/358): src/MyBlazorPlayground.Web/Chaos/Slots/SlotRules.cs
+Processing (140/358): src/MyBlazorPlayground.Web/Chaos/Slots/SlotService.cs
+Processing (141/358): src/MyBlazorPlayground.Web/Chaos/Slots/SlotUpdate.cs
+Processing (142/358): src/MyBlazorPlayground.Web/Chaos/Slots/SlotWin.cs
+Processing (143/358): src/MyBlazorPlayground.Web/Components/App.razor
+Processing (144/358): src/MyBlazorPlayground.Web/Components/App.razor.js
+Processing (145/358): src/MyBlazorPlayground.Web/Components/Islands/BoardIsland.razor
+Processing (146/358): src/MyBlazorPlayground.Web/Components/Islands/BoardIsland.razor.css
+Processing (147/358): src/MyBlazorPlayground.Web/Components/Islands/BoardIsland.razor.js
+Processing (148/358): src/MyBlazorPlayground.Web/Components/Islands/CanvasIsland.razor
+Processing (149/358): src/MyBlazorPlayground.Web/Components/Islands/CanvasIsland.razor.css
+Processing (150/358): src/MyBlazorPlayground.Web/Components/Islands/CanvasIsland.razor.js
+Processing (151/358): src/MyBlazorPlayground.Web/Components/Islands/LatencyIsland.razor
+Processing (152/358): src/MyBlazorPlayground.Web/Components/Islands/LatencyIsland.razor.css
+Processing (153/358): src/MyBlazorPlayground.Web/Components/Islands/LatencyIsland.razor.js
+Processing (154/358): src/MyBlazorPlayground.Web/Components/Islands/PostcardIsland.razor
+Processing (155/358): src/MyBlazorPlayground.Web/Components/Islands/PostcardIsland.razor.css
+Processing (156/358): src/MyBlazorPlayground.Web/Components/Islands/PostcardIsland.razor.js
+Processing (157/358): src/MyBlazorPlayground.Web/Components/Islands/SlotIsland.razor
+Processing (158/358): src/MyBlazorPlayground.Web/Components/Islands/SlotIsland.razor.css
+Processing (159/358): src/MyBlazorPlayground.Web/Components/Islands/SlotIsland.razor.js
+Processing (160/358): src/MyBlazorPlayground.Web/Components/Islands/SyncIsland.razor
+Processing (161/358): src/MyBlazorPlayground.Web/Components/Islands/SyncIsland.razor.js
+Processing (162/358): src/MyBlazorPlayground.Web/Components/Layout/MainLayout.razor
+Processing (163/358): src/MyBlazorPlayground.Web/Components/Layout/MainLayout.razor.css
+Processing (164/358): src/MyBlazorPlayground.Web/Components/Layout/ReconnectBanner.razor
+Processing (165/358): src/MyBlazorPlayground.Web/Components/Layout/ReconnectBanner.razor.css
+Processing (166/358): src/MyBlazorPlayground.Web/Components/Layout/ThemeToggle.razor
+Processing (167/358): src/MyBlazorPlayground.Web/Components/Layout/ThemeToggle.razor.css
+Processing (168/358): src/MyBlazorPlayground.Web/Components/Pages/About.razor
+Processing (169/358): src/MyBlazorPlayground.Web/Components/Pages/About.razor.css
+Processing (170/358): src/MyBlazorPlayground.Web/Components/Pages/Account/Denied.razor
+Processing (171/358): src/MyBlazorPlayground.Web/Components/Pages/Account/Profile.razor
+Processing (172/358): src/MyBlazorPlayground.Web/Components/Pages/Account/Register.razor
+Processing (173/358): src/MyBlazorPlayground.Web/Components/Pages/Account/SignIn.razor
+Processing (174/358): src/MyBlazorPlayground.Web/Components/Pages/Admin/AdminHome.razor
+Processing (175/358): src/MyBlazorPlayground.Web/Components/Pages/Admin/AuditPage.razor
+Processing (176/358): src/MyBlazorPlayground.Web/Components/Pages/Admin/PageEditors.razor
+Processing (177/358): src/MyBlazorPlayground.Web/Components/Pages/Admin/TrashPage.razor
+Processing (178/358): src/MyBlazorPlayground.Web/Components/Pages/BoardPage.razor
+Processing (179/358): src/MyBlazorPlayground.Web/Components/Pages/BoardPage.razor.css
+Processing (180/358): src/MyBlazorPlayground.Web/Components/Pages/CanvasPage.razor
+Processing (181/358): src/MyBlazorPlayground.Web/Components/Pages/CanvasPage.razor.css
+Processing (182/358): src/MyBlazorPlayground.Web/Components/Pages/Error.razor
+Processing (183/358): src/MyBlazorPlayground.Web/Components/Pages/Error.razor.css
+Processing (184/358): src/MyBlazorPlayground.Web/Components/Pages/Home.razor
+Processing (185/358): src/MyBlazorPlayground.Web/Components/Pages/Home.razor.css
+Processing (186/358): src/MyBlazorPlayground.Web/Components/Pages/HomeModerationPage.razor
+Processing (187/358): src/MyBlazorPlayground.Web/Components/Pages/HomesPage.razor
+Processing (188/358): src/MyBlazorPlayground.Web/Components/Pages/HomesPage.razor.css
+Processing (189/358): src/MyBlazorPlayground.Web/Components/Pages/HomesPage.razor.js
+Processing (190/358): src/MyBlazorPlayground.Web/Components/Pages/LatencyPage.razor
+Processing (191/358): src/MyBlazorPlayground.Web/Components/Pages/LatencyPage.razor.css
+Processing (192/358): src/MyBlazorPlayground.Web/Components/Pages/ListingPage.razor
+Processing (193/358): src/MyBlazorPlayground.Web/Components/Pages/ListingPage.razor.css
+Processing (194/358): src/MyBlazorPlayground.Web/Components/Pages/ListingPage.razor.js
+Processing (195/358): src/MyBlazorPlayground.Web/Components/Pages/NotFound.razor
+Processing (196/358): src/MyBlazorPlayground.Web/Components/Pages/PostcardPage.razor
+Processing (197/358): src/MyBlazorPlayground.Web/Components/Pages/PostcardPage.razor.css
+Processing (198/358): src/MyBlazorPlayground.Web/Components/Pages/ReadPage.razor
+Processing (199/358): src/MyBlazorPlayground.Web/Components/Pages/ReadPage.razor.css
+Processing (200/358): src/MyBlazorPlayground.Web/Components/Pages/ReadPage.razor.js
+Processing (201/358): src/MyBlazorPlayground.Web/Components/Pages/SetupPage.razor
+Processing (202/358): src/MyBlazorPlayground.Web/Components/Pages/SlotResult.razor
+Processing (203/358): src/MyBlazorPlayground.Web/Components/Pages/SlotsPage.razor
+Processing (204/358): src/MyBlazorPlayground.Web/Components/Pages/SlotsPage.razor.css
+Processing (205/358): src/MyBlazorPlayground.Web/Components/Pages/Work/Backlog.razor
+Processing (206/358): src/MyBlazorPlayground.Web/Components/Pages/Work/BoardView.razor
+Processing (207/358): src/MyBlazorPlayground.Web/Components/Pages/Work/ItemPage.razor
+Processing (208/358): src/MyBlazorPlayground.Web/Components/Pages/Work/NewItem.razor
+Processing (209/358): src/MyBlazorPlayground.Web/Components/Pages/Work/ProjectSettings.razor
+Processing (210/358): src/MyBlazorPlayground.Web/Components/Pages/Work/SprintsPage.razor
+Processing (211/358): src/MyBlazorPlayground.Web/Components/Pages/Work/WorkHome.razor
+Processing (212/358): src/MyBlazorPlayground.Web/Components/Routes.razor
+Processing (213/358): src/MyBlazorPlayground.Web/Components/Shared/AdminTabs.razor
+Processing (214/358): src/MyBlazorPlayground.Web/Components/Shared/CommentItem.razor
+Processing (215/358): src/MyBlazorPlayground.Web/Components/Shared/FactList.razor
+Processing (216/358): src/MyBlazorPlayground.Web/Components/Shared/FieldInput.razor
+Processing (217/358): src/MyBlazorPlayground.Web/Components/Shared/ItemFields.razor
+Processing (218/358): src/MyBlazorPlayground.Web/Components/Shared/ListingCard.razor
+Processing (219/358): src/MyBlazorPlayground.Web/Components/Shared/Notice.razor
+Processing (220/358): src/MyBlazorPlayground.Web/Components/Shared/ProjectHeader.razor
+Processing (221/358): src/MyBlazorPlayground.Web/Components/Shared/RedirectToSignIn.razor
+Processing (222/358): src/MyBlazorPlayground.Web/Components/Shared/RichEditor.razor
+Processing (223/358): src/MyBlazorPlayground.Web/Components/_Imports.razor
+Processing (224/358): src/MyBlazorPlayground.Web/Identity/AccountService.cs
+Processing (225/358): src/MyBlazorPlayground.Web/Identity/IdentityRegistration.cs
+Processing (226/358): src/MyBlazorPlayground.Web/Identity/LocalUrl.cs
+Processing (227/358): src/MyBlazorPlayground.Web/Identity/PlaygroundClaims.cs
+Processing (228/358): src/MyBlazorPlayground.Web/Identity/SetupGate.cs
+Processing (229/358): src/MyBlazorPlayground.Web/Identity/SignInThrottle.cs
+Processing (230/358): src/MyBlazorPlayground.Web/Infrastructure/ClientAddress.cs
+Processing (231/358): src/MyBlazorPlayground.Web/Infrastructure/ConnectionTracker.cs
+Processing (232/358): src/MyBlazorPlayground.Web/Infrastructure/HubGuard.cs
+Processing (233/358): src/MyBlazorPlayground.Web/Infrastructure/JsCleanup.cs
+Processing (234/358): src/MyBlazorPlayground.Web/Infrastructure/KeyedCooldowns.cs
+Processing (235/358): src/MyBlazorPlayground.Web/Infrastructure/KeyedTokenBuckets.cs
+Processing (236/358): src/MyBlazorPlayground.Web/Infrastructure/LocalTime.cs
+Processing (237/358): src/MyBlazorPlayground.Web/Infrastructure/ModulePath.cs
+Processing (238/358): src/MyBlazorPlayground.Web/Infrastructure/OriginPolicy.cs
+Processing (239/358): src/MyBlazorPlayground.Web/Infrastructure/Outbox.cs
+Processing (240/358): src/MyBlazorPlayground.Web/Infrastructure/RequestLimits.cs
+Processing (241/358): src/MyBlazorPlayground.Web/Infrastructure/SecurityHeaders.cs
+Processing (242/358): src/MyBlazorPlayground.Web/Infrastructure/ServerClock.cs
+Processing (243/358): src/MyBlazorPlayground.Web/Infrastructure/SiteOptions.cs
+Processing (244/358): src/MyBlazorPlayground.Web/Infrastructure/SiteRegistration.cs
+Processing (245/358): src/MyBlazorPlayground.Web/Infrastructure/TokenBucket.cs
+Processing (246/358): src/MyBlazorPlayground.Web/Infrastructure/Uuid7.cs
+Processing (247/358): src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj
+Processing (248/358): src/MyBlazorPlayground.Web/Nest/CommentText.cs
+Processing (249/358): src/MyBlazorPlayground.Web/Nest/Entry.cs
+Processing (250/358): src/MyBlazorPlayground.Web/Nest/EntryKinds.cs
+Processing (251/358): src/MyBlazorPlayground.Web/Nest/EntryRules.cs
+Processing (252/358): src/MyBlazorPlayground.Web/Nest/EntryTime.cs
+Processing (253/358): src/MyBlazorPlayground.Web/Nest/EntryWindow.cs
+Processing (254/358): src/MyBlazorPlayground.Web/Nest/FieldValue.cs
+Processing (255/358): src/MyBlazorPlayground.Web/Nest/INestJournal.cs
+Processing (256/358): src/MyBlazorPlayground.Web/Nest/INestSubscriber.cs
+Processing (257/358): src/MyBlazorPlayground.Web/Nest/Listing.cs
+Processing (258/358): src/MyBlazorPlayground.Web/Nest/ListingFields.cs
+Processing (259/358): src/MyBlazorPlayground.Web/Nest/ListingIndex.cs
+Processing (260/358): src/MyBlazorPlayground.Web/Nest/ListingKey.cs
+Processing (261/358): src/MyBlazorPlayground.Web/Nest/ListingLink.cs
+Processing (262/358): src/MyBlazorPlayground.Web/Nest/NestJournal.cs
+Processing (263/358): src/MyBlazorPlayground.Web/Nest/NestLoader.cs
+Processing (264/358): src/MyBlazorPlayground.Web/Nest/NestModeration.cs
+Processing (265/358): src/MyBlazorPlayground.Web/Nest/NestOptions.cs
+Processing (266/358): src/MyBlazorPlayground.Web/Nest/NestRegistration.cs
+Processing (267/358): src/MyBlazorPlayground.Web/Nest/NestService.cs
+Processing (268/358): src/MyBlazorPlayground.Web/Nest/NestStorage.cs
+Processing (269/358): src/MyBlazorPlayground.Web/Nest/NestUpdate.cs
+Processing (270/358): src/MyBlazorPlayground.Web/Nest/SubmitResult.cs
+Processing (271/358): src/MyBlazorPlayground.Web/Nest/Wire.cs
+Processing (272/358): src/MyBlazorPlayground.Web/Persistence/DatabaseHealthCheck.cs
+Processing (273/358): src/MyBlazorPlayground.Web/Persistence/DatabaseXmlRepository.cs
+Processing (274/358): src/MyBlazorPlayground.Web/Persistence/PersistenceRegistration.cs
+Processing (275/358): src/MyBlazorPlayground.Web/Persistence/StartupTasks.cs
+Processing (276/358): src/MyBlazorPlayground.Web/Program.cs
+Processing (277/358): src/MyBlazorPlayground.Web/Properties/launchSettings.json
+Processing (278/358): src/MyBlazorPlayground.Web/Work/ItemForm.cs
+Processing (279/358): src/MyBlazorPlayground.Web/Work/ProjectAccess.cs
+Processing (280/358): src/MyBlazorPlayground.Web/Work/WorkEndpoints.cs
+Processing (281/358): src/MyBlazorPlayground.Web/Work/WorkOptions.cs
+Processing (282/358): src/MyBlazorPlayground.Web/Work/WorkRegistration.cs
+Processing (283/358): src/MyBlazorPlayground.Web/Work/WorkService.cs
+Processing (284/358): src/MyBlazorPlayground.Web/appsettings.Development.json
+Processing (285/358): src/MyBlazorPlayground.Web/appsettings.json
+Processing (286/358): src/MyBlazorPlayground.Web/wwwroot/app.css
+Processing (287/358): src/MyBlazorPlayground.Web/wwwroot/favicon.svg
+Processing (288/358): src/MyBlazorPlayground.Web/wwwroot/js/fields.js
+Processing (289/358): src/MyBlazorPlayground.Web/wwwroot/js/keys.js
+Processing (290/358): src/MyBlazorPlayground.Web/wwwroot/js/merge.js
+Processing (291/358): src/MyBlazorPlayground.Web/wwwroot/js/store.js
+Processing (292/358): src/MyBlazorPlayground.Web/wwwroot/js/sync.js
+Processing (293/358): src/MyBlazorPlayground.Web/wwwroot/theme-init.js
+Processing (294/358): src/MyBlazorPlayground.Web/wwwroot/work/board.js
+Processing (295/358): src/MyBlazorPlayground.Web/wwwroot/work/editor.js
+Processing (296/358): tests/Directory.Build.props
+Processing (297/358): tests/MyBlazorPlayground.Data.Tests/DeletionTests.cs
+Processing (298/358): tests/MyBlazorPlayground.Data.Tests/MigrationTests.cs
+Processing (299/358): tests/MyBlazorPlayground.Data.Tests/MyBlazorPlayground.Data.Tests.csproj
+Processing (300/358): tests/MyBlazorPlayground.Data.Tests/PersonStoreTests.cs
+Processing (301/358): tests/MyBlazorPlayground.Data.Tests/TestDatabase.cs
+Processing (302/358): tests/MyBlazorPlayground.Data.Tests/WorkStoreTests.cs
+Processing (303/358): tests/MyBlazorPlayground.Domain.Tests/MyBlazorPlayground.Domain.Tests.csproj
+Processing (304/358): tests/MyBlazorPlayground.Domain.Tests/RichTextTests.cs
+Processing (305/358): tests/MyBlazorPlayground.Domain.Tests/RulesTests.cs
+Processing (306/358): tests/MyBlazorPlayground.Domain.Tests/SecurityTests.cs
+Processing (307/358): tests/MyBlazorPlayground.Web.Tests/Chaos/ArticleLibraryTests.cs
+Processing (308/358): tests/MyBlazorPlayground.Web.Tests/Chaos/ArticleSamples.cs
+Processing (309/358): tests/MyBlazorPlayground.Web.Tests/Chaos/ArticleTextTests.cs
+Processing (310/358): tests/MyBlazorPlayground.Web.Tests/Chaos/BoardServiceTests.cs
+Processing (311/358): tests/MyBlazorPlayground.Web.Tests/Chaos/CanvasPersistenceTests.cs
+Processing (312/358): tests/MyBlazorPlayground.Web.Tests/Chaos/CanvasServiceTests.cs
+Processing (313/358): tests/MyBlazorPlayground.Web.Tests/Chaos/ClockAndCooldownTests.cs
+Processing (314/358): tests/MyBlazorPlayground.Web.Tests/Chaos/ImageSanitizerTests.cs
+Processing (315/358): tests/MyBlazorPlayground.Web.Tests/Chaos/InfrastructureTests.cs
+Processing (316/358): tests/MyBlazorPlayground.Web.Tests/Chaos/LatencyRunTests.cs
+Processing (317/358): tests/MyBlazorPlayground.Web.Tests/Chaos/LatencyServiceTests.cs
+Processing (318/358): tests/MyBlazorPlayground.Web.Tests/Chaos/MessageFormatTests.cs
+Processing (319/358): tests/MyBlazorPlayground.Web.Tests/Chaos/MessageMetaTests.cs
+Processing (320/358): tests/MyBlazorPlayground.Web.Tests/Chaos/MessageTextTests.cs
+Processing (321/358): tests/MyBlazorPlayground.Web.Tests/Chaos/OutboxTests.cs
+Processing (322/358): tests/MyBlazorPlayground.Web.Tests/Chaos/PostcardServiceTests.cs
+Processing (323/358): tests/MyBlazorPlayground.Web.Tests/Chaos/SlotRulesTests.cs
+Processing (324/358): tests/MyBlazorPlayground.Web.Tests/Chaos/SlotServiceTests.cs
+Processing (325/358): tests/MyBlazorPlayground.Web.Tests/Chaos/TestSupport.cs
+Processing (326/358): tests/MyBlazorPlayground.Web.Tests/Chaos/Uuid7Tests.cs
+Processing (327/358): tests/MyBlazorPlayground.Web.Tests/MyBlazorPlayground.Web.Tests.csproj
+Processing (328/358): tests/MyBlazorPlayground.Web.Tests/Nest/EntryRulesTests.cs
+Processing (329/358): tests/MyBlazorPlayground.Web.Tests/Nest/ListingFieldsTests.cs
+Processing (330/358): tests/MyBlazorPlayground.Web.Tests/Nest/ListingIndexTests.cs
+Processing (331/358): tests/MyBlazorPlayground.Web.Tests/Nest/ListingKeyTests.cs
+Processing (332/358): tests/MyBlazorPlayground.Web.Tests/Nest/NestPersistenceTests.cs
+Processing (333/358): tests/MyBlazorPlayground.Web.Tests/Nest/NestServiceTests.cs
+Processing (334/358): tests/MyBlazorPlayground.Web.Tests/Nest/TestSupport.cs
+Processing (335/358): tests/MyBlazorPlayground.Web.Tests/Work/WorkFormTests.cs
+Processing (336/358): tests/fixtures/nest/addresses.json
+Processing (337/358): tests/fixtures/nest/fields.json
+Processing (338/358): tests/fixtures/nest/links.json
+Processing (339/358): tests/fixtures/nest/listings.json
+Processing (340/358): tests/js/chaos/app.test.js
+Processing (341/358): tests/js/chaos/board.test.js
+Processing (342/358): tests/js/chaos/canvas.test.js
+Processing (343/358): tests/js/chaos/latency.test.js
+Processing (344/358): tests/js/chaos/postcard.test.js
+Processing (345/358): tests/js/chaos/read.test.js
+Processing (346/358): tests/js/chaos/slots.test.js
+Processing (347/358): tests/js/chaos/status.test.js
+Processing (348/358): tests/js/nest/app.test.js
+Processing (349/358): tests/js/nest/fields.test.js
+Processing (350/358): tests/js/nest/fixtures.js
+Processing (351/358): tests/js/nest/keys.test.js
+Processing (352/358): tests/js/nest/merge.test.js
+Processing (353/358): tests/js/nest/store.test.js
+Processing (354/358): tests/js/nest/sync.test.js
+Processing (355/358): tests/js/nest/views.test.js
+Processing (356/358): tests/js/package.json
+Processing (357/358): tests/js/vitest.config.mjs
+Processing (358/358): tests/js/work/editor.test.js
+
+Export completed successfully!
+Output file: /home/kushal/src/dotnet/myblazorplayground/docs/llm/dump.txt
+Total source size: 1.18 MB across 358 files
+
+real	0m4.901s
+user	0m2.358s
+sys	0m3.570s
+#!/usr/bin/env bash
+#
+# Build with warnings as errors, then run the .NET and JavaScript tests.
+#
+#   scripts/test.sh              everything; database tests use a throwaway postgres container
+#   scripts/test.sh --no-db      skip the database tests
+#   scripts/test.sh --no-js      skip the JavaScript tests
+#
+# Set PLAYGROUND_TEST_DATABASE to a connection string that may create databases to use your own server.
+#
+
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+LOG_TAG=test
+cd "$ROOT"
+
+use_db=1
+use_js=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-db) use_db=0 ;;
+        --no-js) use_js=0 ;;
+        *) printf 'unknown argument %s\n' "$arg" >&2; exit 2 ;;
+    esac
+done
+
+require dotnet
+container=""
+cleanup() {
+    if [[ -n "$container" ]]; then
+        "$ENGINE" rm -f "$container" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
+
+if (( use_db )) && [[ -z "${PLAYGROUND_TEST_DATABASE:-}" ]]; then
+    detect_engine
+    container="myblazorplayground-test-db-$$"
+    step "Starting a throwaway PostgreSQL"
+    "$ENGINE" run -d --rm --name "$container" -e POSTGRES_PASSWORD=test -p 127.0.0.1::5432 \
+        "${TEST_POSTGRES_IMAGE:-docker.io/library/postgres:18-alpine}" >/dev/null
+    host_port="$("$ENGINE" port "$container" 5432/tcp | head -n 1 | sed 's/.*://')"
+    for _ in $(seq 1 60); do
+        "$ENGINE" exec "$container" pg_isready -U postgres >/dev/null 2>&1 && break
+        sleep 1
+    done
+    export PLAYGROUND_TEST_DATABASE="Host=127.0.0.1;Port=${host_port};Database=postgres;Username=postgres;Password=test"
+fi
+
+step "Build"
+dotnet build MyBlazorPlayground.slnx --configuration Release -p:ContinuousIntegrationBuild=true
+
+step ".NET tests"
+dotnet test --solution MyBlazorPlayground.slnx --configuration Release --no-build --results-directory "$ARTIFACTS/test-results"
+
+if (( use_js )); then
+    require node npm
+    step "JavaScript tests"
+    (cd tests/js && npm install --no-audit --no-fund && npx vitest run)
+fi
+
+step "All tests passed"
+
+==> Starting a throwaway PostgreSQL
+
+==> Build
+Restore complete (0.7s)
+    info NETSDK1057: You are using a preview version of .NET. See: https://aka.ms/dotnet-support-policy
+  MyBlazorPlayground.Domain net11.0 succeeded (1.4s) → src/MyBlazorPlayground.Domain/bin/Release/net11.0/MyBlazorPlayground.Domain.dll
+  MyBlazorPlayground.Domain.Tests net11.0 succeeded (0.5s) → tests/MyBlazorPlayground.Domain.Tests/bin/Release/net11.0/MyBlazorPlayground.Domain.Tests.dll
+  MyBlazorPlayground.Data net11.0 succeeded (0.7s) → src/MyBlazorPlayground.Data/bin/Release/net11.0/MyBlazorPlayground.Data.dll
+  MyBlazorPlayground.Data.Tests net11.0 succeeded (0.6s) → tests/MyBlazorPlayground.Data.Tests/bin/Release/net11.0/MyBlazorPlayground.Data.Tests.dll
+  MyBlazorPlayground.Web net11.0 succeeded (3.1s) → src/MyBlazorPlayground.Web/bin/Release/net11.0/MyBlazorPlayground.Web.dll
+  MyBlazorPlayground.Web.Tests net11.0 succeeded (0.7s) → tests/MyBlazorPlayground.Web.Tests/bin/Release/net11.0/MyBlazorPlayground.Web.Tests.dll
+
+Build succeeded in 6.8s
+
+==> .NET tests
+Running tests from tests/MyBlazorPlayground.Domain.Tests/bin/Release/net11.0/MyBlazorPlayground.Domain.Tests.dll (net11.0|x64)
+Running tests from tests/MyBlazorPlayground.Web.Tests/bin/Release/net11.0/MyBlazorPlayground.Web.Tests.dll (net11.0|x64)
+Running tests from tests/MyBlazorPlayground.Data.Tests/bin/Release/net11.0/MyBlazorPlayground.Data.Tests.dll (net11.0|x64)
+tests/MyBlazorPlayground.Web.Tests/bin/Release/net11.0/MyBlazorPlayground.Web.Tests.dll (net11.0|x64) passed [✓359/x0/↓0] (589ms)
+tests/MyBlazorPlayground.Domain.Tests/bin/Release/net11.0/MyBlazorPlayground.Domain.Tests.dll (net11.0|x64) passed [✓78/x0/↓0] (596ms)
+tests/MyBlazorPlayground.Data.Tests/bin/Release/net11.0/MyBlazorPlayground.Data.Tests.dll (net11.0|x64) passed [✓14/x0/↓0] (2s 219ms)
+
+Test run summary: Passed!
+  tests/MyBlazorPlayground.Domain.Tests/bin/Release/net11.0/MyBlazorPlayground.Domain.Tests.dll (net11.0|x64) passed [✓78/x0/↓0] (596ms)
+  tests/MyBlazorPlayground.Web.Tests/bin/Release/net11.0/MyBlazorPlayground.Web.Tests.dll (net11.0|x64) passed [✓359/x0/↓0] (589ms)
+  tests/MyBlazorPlayground.Data.Tests/bin/Release/net11.0/MyBlazorPlayground.Data.Tests.dll (net11.0|x64) passed [✓14/x0/↓0] (2s 219ms)
+
+  total: 451
+  failed: 0
+  succeeded: 451
+  skipped: 0
+  duration: 2s 404ms
+
+==> JavaScript tests
+
+added 47 packages in 6s
+
+ RUN  v5.1.0 /home/kushal/src/dotnet/myblazorplayground/tests/js
+
+ ✓ chaos/status.test.js (9 tests) 7ms
+ ✓ chaos/canvas.test.js (21 tests) 9ms
+ ✓ chaos/board.test.js (23 tests) 46ms
+ ✓ chaos/postcard.test.js (15 tests) 9ms
+ ✓ chaos/read.test.js (14 tests) 13ms
+ ✓ nest/keys.test.js (45 tests) 20ms
+ ✓ nest/fields.test.js (48 tests) 17ms
+ ✓ chaos/latency.test.js (33 tests) 17ms
+ ✓ nest/merge.test.js (6 tests) 19ms
+ ✓ nest/sync.test.js (10 tests) 11ms
+ ✓ nest/app.test.js (6 tests) 6ms
+ ✓ work/editor.test.js (7 tests) 7ms
+ ✓ chaos/app.test.js (13 tests) 8ms
+ ✓ chaos/slots.test.js (49 tests) 30ms
+ ✓ nest/views.test.js (8 tests) 8ms
+ ✓ nest/store.test.js (4 tests) 3ms
+
+ Test Files  16 passed (16)
+      Tests  311 passed (311)
+   Start at  06:28:36
+   Duration  406ms (transform 78%, import 12%, tests 8%, worker 2%)
+
+
+==> All tests passed
+
+real	0m19.044s
+user	0m10.386s
+sys	0m2.607s
+Thu Nov 19 06:28:37 AM EST 2026
+kushal@fedora:~/src/dotnet/myblazorplayground$ 

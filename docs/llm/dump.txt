@@ -1,12 +1,12 @@
 ===============================================================================
 PROJECT EXPORT
-Generated (UTC): 2026-11-19 11:11:45
+Generated (UTC): 2026-11-19 11:28:14
 Project Path:    /home/kushal/src/dotnet/myblazorplayground
-Git Commit:      0ac8302dc8b41e37eeaf4efbcca99c179c61c80b
+Git Commit:      3d6975fbcc75001225fd43c3842a3017929a99dc
 Git Branch:      main
 Git Dirty:       no
 .NET SDK:        11.0.100-rc.3.26522.148
-Files Exported:  357
+Files Exported:  358
 ===============================================================================
 
 DIRECTORY STRUCTURE (exported files only):
@@ -78,6 +78,7 @@ DIRECTORY STRUCTURE (exported files only):
             MigrationRunner.cs
             Migrations/
                 0001_initial.sql
+                0002_event_order.sql
             MyBlazorPlayground.Data.csproj
             Nest/
                 NestEntryStore.cs
@@ -983,10 +984,10 @@ Status: accepted
 
 ================================================================================
 FILE:     docs/adr/0004-data-access.md
-SIZE:     1.57 KB (1604 bytes)
+SIZE:     1.68 KB (1720 bytes)
 LINES:    12
-SHA256:   33da295c81c9859a4df3020226b90395618e896bdf514c5636ad48bf9f90d9c0
-MODIFIED: 2026-11-19 10:57:08 (UTC)
+SHA256:   078ea0de752f9fa23a2a571d79b89aa44f669de8ba03ec8a88fdb929212e500f
+MODIFIED: 2026-11-19 11:16:29 (UTC)
 ================================================================================
 
 # 0004 PostgreSQL, Dapper and our own migration runner
@@ -996,7 +997,7 @@ Status: accepted
 - PostgreSQL is the only store. Dapper maps rows to classes with `init` properties; `DefaultTypeMap.MatchNamesWithUnderscores` maps `snake_case` columns.
 - Migrations are numbered SQL files embedded in `MyBlazorPlayground.Data` (`Migrations/0001_initial.sql`). `MigrationRunner` applies the missing ones in order, each in its own transaction, under a PostgreSQL advisory lock, and records them in `schema_migration`. It retries for two minutes while the database is starting. No migration library: the runner is fifty lines.
 - Migrations run before the host starts (`StartupTasks`), so nothing (including the Data Protection key ring) touches the database before its schema exists.
-- Ids are UUIDv7 from `Guid.CreateVersion7()`; they sort by creation time, which audit paging and nest rely on.
+- Ids are UUIDv7 from `Guid.CreateVersion7()`; they sort by creation time, which nest relies on. UUIDv7 is not ordered within one millisecond, so item history and the audit log are ordered by an identity column (`seq`) instead.
 - Dates are passed as text and cast in SQL, and returned with `to_char`, so nothing depends on how a driver maps `date`. Timestamps are set by `now()` in SQL.
 - Multi-step changes and every deletion run in one transaction together with their audit row.
 - Attachments are stored in `attachment_chunk` rows of 1 MiB (`STORAGE EXTERNAL`, no recompression). Upload and download stream chunk by chunk, so memory stays flat whatever the file size, and no single value approaches PostgreSQL's 1 GB limit.
@@ -2275,10 +2276,10 @@ step "All tests passed"
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Data/Audit/AuditLog.cs
-SIZE:     2.41 KB (2470 bytes)
-LINES:    64
-SHA256:   aad419abf56e96cfa0c1abf33e5b21ba7a092eac0d9e60f0e77dd7ddb8301969
-MODIFIED: 2026-11-19 10:17:15 (UTC)
+SIZE:     2.46 KB (2517 bytes)
+LINES:    66
+SHA256:   d86b3489873233e9bf304362005bf75e3d7e6276319ee1a56708c67b2bfb8b64
+MODIFIED: 2026-11-19 11:16:22 (UTC)
 ================================================================================
 
 using Dapper;
@@ -2291,6 +2292,8 @@ public sealed record AuditEntry(Guid? ActorId, string? ActorName, string Action,
 public sealed class AuditRecord
 {
     public Guid Id { get; init; }
+
+    public long Seq { get; init; }
 
     public DateTime OccurredAt { get; init; }
 
@@ -2330,15 +2333,15 @@ public sealed class AuditLog(Database database)
             cancellationToken: cancellationToken));
     }
 
-    public async Task<IReadOnlyList<AuditRecord>> ListAsync(int limit, Guid? before, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AuditRecord>> ListAsync(int limit, long? before, CancellationToken cancellationToken = default)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
         return (await connection.QueryAsync<AuditRecord>(new CommandDefinition(
             """
-            SELECT id, occurred_at, actor_name, action, subject_type, subject_id, summary
+            SELECT id, seq, occurred_at, actor_name, action, subject_type, subject_id, summary
             FROM audit_event
-            WHERE @before::uuid IS NULL OR id < @before::uuid
-            ORDER BY id DESC
+            WHERE @before::bigint IS NULL OR seq < @before::bigint
+            ORDER BY seq DESC
             LIMIT @limit
             """,
             new { limit, before },
@@ -2718,6 +2721,23 @@ CREATE TABLE nest_entry (
 );
 
 CREATE INDEX nest_entry_keys ON nest_entry USING gin (keys);
+
+
+================================================================================
+FILE:     src/MyBlazorPlayground.Data/Migrations/0002_event_order.sql
+SIZE:     0.36 KB (367 bytes)
+LINES:    7
+SHA256:   5bd73e39d25e3371f6d28965d43da2b8c7b5dcf3e636fe5046c0517263b43376
+MODIFIED: 2026-11-19 11:16:22 (UTC)
+================================================================================
+
+ALTER TABLE work_item_event ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY;
+CREATE INDEX work_item_event_item_seq ON work_item_event (work_item_id, seq);
+DROP INDEX work_item_event_item;
+
+ALTER TABLE audit_event ADD COLUMN seq bigint GENERATED ALWAYS AS IDENTITY;
+CREATE UNIQUE INDEX audit_event_seq ON audit_event (seq DESC);
+DROP INDEX audit_event_occurred_at;
 
 
 ================================================================================
@@ -4062,10 +4082,10 @@ public sealed class SprintStore(Database database)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Data/Work/WorkItemStore.cs
-SIZE:     21.49 KB (22001 bytes)
+SIZE:     21.47 KB (21987 bytes)
 LINES:    513
-SHA256:   7bb044f0fab39b4943c9d29fbd7f6858b7c7cb6d85621f81c0cdb551fc6fbad1
-MODIFIED: 2026-11-19 10:19:04 (UTC)
+SHA256:   790ea69ad02d6b3e39dedb8b74460fe4818d9d743370954934b88482d244ebe9
+MODIFIED: 2026-11-19 11:16:22 (UTC)
 ================================================================================
 
 using Dapper;
@@ -4357,7 +4377,7 @@ public sealed class WorkItemStore(Database database)
             SELECT e.occurred_at, p.display_name AS actor_name, e.field, e.old_value, e.new_value
             FROM work_item_event e LEFT JOIN person p ON p.id = e.actor_id
             WHERE e.work_item_id = @itemId
-            ORDER BY e.occurred_at, e.id
+            ORDER BY e.seq
             """,
             new { itemId },
             cancellationToken: cancellationToken))).AsList();
@@ -18262,10 +18282,10 @@ MODIFIED: 2026-11-19 10:29:49 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Pages/Admin/AuditPage.razor
-SIZE:     1.64 KB (1679 bytes)
+SIZE:     1.64 KB (1680 bytes)
 LINES:    55
-SHA256:   4e5ffeb133450346fa2f276ac1cf6c876edee7b2d513630d5cbfcc19bef6b95a
-MODIFIED: 2026-11-19 10:30:18 (UTC)
+SHA256:   8455fc45bde28ac3861c39d01ea121de7d47fc262359bc9b608b26e3d1a15138
+MODIFIED: 2026-11-19 11:16:22 (UTC)
 ================================================================================
 
 @page "/admin/audit"
@@ -18307,7 +18327,7 @@ else
     </div>
     @if (_events.Count == PageSize)
     {
-        <p><a href="admin/audit?before=@_events[^1].Id">Older</a></p>
+        <p><a href="admin/audit?before=@_events[^1].Seq">Older</a></p>
     }
 }
 
@@ -18319,7 +18339,7 @@ else
     private HttpContext HttpContext { get; set; } = default!;
 
     [SupplyParameterFromQuery]
-    public Guid? Before { get; set; }
+    public long? Before { get; set; }
 
     protected override async Task OnParametersSetAsync() => _events = await Audit.ListAsync(PageSize, Before, HttpContext.RequestAborted);
 }
@@ -31338,10 +31358,10 @@ MODIFIED: 2026-11-19 10:39:13 (UTC)
 
 ================================================================================
 FILE:     tests/MyBlazorPlayground.Data.Tests/DeletionTests.cs
-SIZE:     4.45 KB (4553 bytes)
+SIZE:     5.55 KB (5683 bytes)
 LINES:    81
-SHA256:   29c66373d52eeb0555e3a937f7f602bcdce3d5ce3d02c342a19ccea8347b9b22
-MODIFIED: 2026-11-19 10:46:53 (UTC)
+SHA256:   4839f68586b0525a0f85803e8fc38c849ee71c12d4b919b9531f248448227f86
+MODIFIED: 2026-11-19 11:15:48 (UTC)
 ================================================================================
 
 using MyBlazorPlayground.Data.Nest;
@@ -31358,31 +31378,31 @@ public sealed class DeletionTests
     {
         await using var test = await TestDatabase.CreateAsync();
         var owner = await test.PersonAsync("owner", true);
-        var (_, project) = await new ProjectStore(test.Database).CreateAsync("TRSH", "Trash", "", owner, TestDatabase.Audit(owner));
+        var (_, project) = await new ProjectStore(test.Database).CreateAsync("TRSH", "Trash", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
         var items = new WorkItemStore(test.Database);
-        var (item, number) = await items.CreateAsync(project, new WorkItemFields(WorkItemKinds.Bug, "Doomed", "", WorkItemStatuses.Backlog, 2, null, null, null, null), owner);
+        var (item, number) = await items.CreateAsync(project, new WorkItemFields(WorkItemKinds.Bug, "Doomed", "", WorkItemStatuses.Backlog, 2, null, null, null, null), owner, TestContext.Current.CancellationToken);
         var deletions = new Deletions(test.Database);
 
-        Assert.False(await deletions.HardDeleteAsync(Subject.WorkItem, item, TestDatabase.Audit(owner, "hard-delete")));
-        Assert.True(await deletions.SoftDeleteAsync(Subject.WorkItem, item, owner, TestDatabase.Audit(owner, "soft-delete")));
-        Assert.False(await deletions.SoftDeleteAsync(Subject.WorkItem, item, owner, TestDatabase.Audit(owner, "soft-delete")));
-        Assert.Null(await items.FindAsync(project, number));
-        Assert.NotNull(await items.FindAsync(project, number, includeDeleted: true));
+        Assert.False(await deletions.HardDeleteAsync(Subject.WorkItem, item, TestDatabase.Audit(owner, "hard-delete"), TestContext.Current.CancellationToken));
+        Assert.True(await deletions.SoftDeleteAsync(Subject.WorkItem, item, owner, TestDatabase.Audit(owner, "soft-delete"), TestContext.Current.CancellationToken));
+        Assert.False(await deletions.SoftDeleteAsync(Subject.WorkItem, item, owner, TestDatabase.Audit(owner, "soft-delete"), TestContext.Current.CancellationToken));
+        Assert.Null(await items.FindAsync(project, number, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.NotNull(await items.FindAsync(project, number, includeDeleted: true, TestContext.Current.CancellationToken));
 
-        var trashed = Assert.Single(await deletions.ListAsync(null, 10));
+        var trashed = Assert.Single(await deletions.ListAsync(null, 10, TestContext.Current.CancellationToken));
         Assert.Equal(Subject.WorkItem, trashed.Subject);
         Assert.Equal("TRSH", trashed.ProjectKey);
         Assert.Equal(project, trashed.ProjectId);
         Assert.Equal("#1 Doomed", trashed.Title);
-        Assert.Single(await deletions.ListAsync(project, 10));
-        Assert.NotNull(await deletions.FindAsync(Subject.WorkItem, item));
+        Assert.Single(await deletions.ListAsync(project, 10, TestContext.Current.CancellationToken));
+        Assert.NotNull(await deletions.FindAsync(Subject.WorkItem, item, TestContext.Current.CancellationToken));
 
-        Assert.True(await deletions.RestoreAsync(Subject.WorkItem, item, TestDatabase.Audit(owner, "restore")));
-        Assert.NotNull(await items.FindAsync(project, number));
-        Assert.True(await deletions.SoftDeleteAsync(Subject.WorkItem, item, owner, TestDatabase.Audit(owner, "soft-delete")));
-        Assert.True(await deletions.HardDeleteAsync(Subject.WorkItem, item, TestDatabase.Audit(owner, "hard-delete")));
-        Assert.Null(await items.FindAsync(project, number, includeDeleted: true));
-        Assert.Empty(await deletions.ListAsync(null, 10));
+        Assert.True(await deletions.RestoreAsync(Subject.WorkItem, item, TestDatabase.Audit(owner, "restore"), TestContext.Current.CancellationToken));
+        Assert.NotNull(await items.FindAsync(project, number, cancellationToken: TestContext.Current.CancellationToken));
+        Assert.True(await deletions.SoftDeleteAsync(Subject.WorkItem, item, owner, TestDatabase.Audit(owner, "soft-delete"), TestContext.Current.CancellationToken));
+        Assert.True(await deletions.HardDeleteAsync(Subject.WorkItem, item, TestDatabase.Audit(owner, "hard-delete"), TestContext.Current.CancellationToken));
+        Assert.Null(await items.FindAsync(project, number, includeDeleted: true, TestContext.Current.CancellationToken));
+        Assert.Empty(await deletions.ListAsync(null, 10, TestContext.Current.CancellationToken));
         Assert.Equal(["soft-delete", "restore", "soft-delete", "hard-delete"],
             await AuditActionsAsync(test));
     }
@@ -31395,17 +31415,17 @@ public sealed class DeletionTests
         var store = new NestEntryStore(test.Database);
         var first = new NestEntryRow(Guid.CreateVersion7(), "comment", ["zillow:1"], null, null, "spam");
         var second = new NestEntryRow(Guid.CreateVersion7(), "fact", ["zillow:1", "redfin:2"], null, "[{\"key\":\"price\",\"value\":\"450000\"}]", null);
-        Assert.Equal(2, await store.InsertAsync([first, second]));
-        Assert.Equal(0, await store.InsertAsync([first]));
+        Assert.Equal(2, await store.InsertAsync([first, second], TestContext.Current.CancellationToken));
+        Assert.Equal(0, await store.InsertAsync([first], TestContext.Current.CancellationToken));
 
         var deletions = new Deletions(test.Database);
-        Assert.True(await deletions.SoftDeleteAsync(Subject.NestEntry, first.Id, admin, TestDatabase.Audit(admin)));
-        Assert.Single(await deletions.ListAsync(null, 10));
-        Assert.True(await deletions.HardDeleteAsync(Subject.NestEntry, first.Id, TestDatabase.Audit(admin)));
-        Assert.Empty(await deletions.ListAsync(null, 10));
-        Assert.False(await deletions.RestoreAsync(Subject.NestEntry, first.Id, TestDatabase.Audit(admin)));
+        Assert.True(await deletions.SoftDeleteAsync(Subject.NestEntry, first.Id, admin, TestDatabase.Audit(admin), TestContext.Current.CancellationToken));
+        Assert.Single(await deletions.ListAsync(null, 10, TestContext.Current.CancellationToken));
+        Assert.True(await deletions.HardDeleteAsync(Subject.NestEntry, first.Id, TestDatabase.Audit(admin), TestContext.Current.CancellationToken));
+        Assert.Empty(await deletions.ListAsync(null, 10, TestContext.Current.CancellationToken));
+        Assert.False(await deletions.RestoreAsync(Subject.NestEntry, first.Id, TestDatabase.Audit(admin), TestContext.Current.CancellationToken));
 
-        var loaded = await store.LoadAsync(100);
+        var loaded = await store.LoadAsync(100, TestContext.Current.CancellationToken);
         Assert.Equal(2, loaded.Count);
         var tombstone = loaded.Single(record => record.Id == first.Id);
         Assert.NotNull(tombstone.DeletedAt);
@@ -31414,15 +31434,15 @@ public sealed class DeletionTests
         Assert.Equal(["zillow:1", "redfin:2"], live.Keys);
         Assert.Contains("450000", live.Fields!);
 
-        Assert.Single(await store.ForKeysAsync(["redfin:2"]));
-        Assert.Single(await store.ForKeysAsync(["zillow:1"]));
-        Assert.NotNull(await store.FindAsync(second.Id));
+        Assert.Single(await store.ForKeysAsync(["redfin:2"], TestContext.Current.CancellationToken));
+        Assert.Single(await store.ForKeysAsync(["zillow:1"], TestContext.Current.CancellationToken));
+        Assert.NotNull(await store.FindAsync(second.Id, TestContext.Current.CancellationToken));
     }
 
     private static async Task<string[]> AuditActionsAsync(TestDatabase test)
     {
         var log = new Audit.AuditLog(test.Database);
-        return [.. (await log.ListAsync(100, null)).Where(entry => entry.SubjectType == "test" && entry.Action != "test").Reverse().Select(entry => entry.Action)];
+        return [.. (await log.ListAsync(100, null, TestContext.Current.CancellationToken)).Where(entry => entry.SubjectType == "test" && entry.Action != "test").Reverse().Select(entry => entry.Action)];
     }
 }
 
@@ -31484,10 +31504,10 @@ MODIFIED: 2026-11-19 10:39:13 (UTC)
 
 ================================================================================
 FILE:     tests/MyBlazorPlayground.Data.Tests/PersonStoreTests.cs
-SIZE:     2.92 KB (2992 bytes)
+SIZE:     3.72 KB (3807 bytes)
 LINES:    66
-SHA256:   d7fb85e280aabb93bd62e55ee7a8e79a9ea7154b295ec2868fa42a27c260c044
-MODIFIED: 2026-11-19 10:45:13 (UTC)
+SHA256:   709721bafcca576d9f6fb3903c57eba2871bf585d8a585f6f6cd9b376be3d235
+MODIFIED: 2026-11-19 11:15:07 (UTC)
 ================================================================================
 
 using MyBlazorPlayground.Data.People;
@@ -31501,17 +31521,17 @@ public sealed class PersonStoreTests
     {
         await using var test = await TestDatabase.CreateAsync();
         var people = new PersonStore(test.Database);
-        Assert.False(await people.HasAdministratorAsync());
-        var (first, id) = await people.CreateAsync(new NewPerson("alice", "Alice", "hash"), true);
-        var (second, _) = await people.CreateAsync(new NewPerson("bob", "Bob", "hash"), true);
+        Assert.False(await people.HasAdministratorAsync(TestContext.Current.CancellationToken));
+        var (first, id) = await people.CreateAsync(new NewPerson("alice", "Alice", "hash"), true, TestContext.Current.CancellationToken);
+        var (second, _) = await people.CreateAsync(new NewPerson("bob", "Bob", "hash"), true, TestContext.Current.CancellationToken);
         Assert.Equal(CreatePersonResult.Created, first);
         Assert.Equal(CreatePersonResult.SetupAlreadyDone, second);
-        Assert.True(await people.HasAdministratorAsync());
-        var alice = await people.FindByUserNameAsync("alice");
+        Assert.True(await people.HasAdministratorAsync(TestContext.Current.CancellationToken));
+        var alice = await people.FindByUserNameAsync("alice", TestContext.Current.CancellationToken);
         Assert.NotNull(alice);
         Assert.Equal(id, alice.Id);
         Assert.True(alice.IsAdministrator);
-        Assert.Null(await people.FindByUserNameAsync("bob"));
+        Assert.Null(await people.FindByUserNameAsync("bob", TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -31519,8 +31539,8 @@ public sealed class PersonStoreTests
     {
         await using var test = await TestDatabase.CreateAsync();
         var people = new PersonStore(test.Database);
-        Assert.Equal(CreatePersonResult.Created, (await people.CreateAsync(new NewPerson("carol", "Carol", "hash"), false)).Result);
-        Assert.Equal(CreatePersonResult.UserNameTaken, (await people.CreateAsync(new NewPerson("carol", "Other", "hash"), false)).Result);
+        Assert.Equal(CreatePersonResult.Created, (await people.CreateAsync(new NewPerson("carol", "Carol", "hash"), false, TestContext.Current.CancellationToken)).Result);
+        Assert.Equal(CreatePersonResult.UserNameTaken, (await people.CreateAsync(new NewPerson("carol", "Other", "hash"), false, TestContext.Current.CancellationToken)).Result);
     }
 
     [Fact]
@@ -31530,14 +31550,14 @@ public sealed class PersonStoreTests
         var people = new PersonStore(test.Database);
         var admin = await test.PersonAsync("root", true);
         var other = await test.PersonAsync("other");
-        Assert.False(await people.SetAdministratorAsync(admin, false, admin));
-        Assert.False(await people.SetDisabledAsync(admin, true));
-        Assert.True(await people.SetAdministratorAsync(other, true, admin));
-        Assert.True(await people.SetAdministratorAsync(admin, false, other));
-        Assert.True(await people.SetDisabledAsync(admin, true));
-        var disabled = await people.FindAsync(admin);
+        Assert.False(await people.SetAdministratorAsync(admin, false, admin, TestContext.Current.CancellationToken));
+        Assert.False(await people.SetDisabledAsync(admin, true, TestContext.Current.CancellationToken));
+        Assert.True(await people.SetAdministratorAsync(other, true, admin, TestContext.Current.CancellationToken));
+        Assert.True(await people.SetAdministratorAsync(admin, false, other, TestContext.Current.CancellationToken));
+        Assert.True(await people.SetDisabledAsync(admin, true, TestContext.Current.CancellationToken));
+        var disabled = await people.FindAsync(admin, TestContext.Current.CancellationToken);
         Assert.NotNull(disabled?.DisabledAt);
-        Assert.True(await people.SetDisabledAsync(admin, false));
+        Assert.True(await people.SetDisabledAsync(admin, false, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -31546,14 +31566,14 @@ public sealed class PersonStoreTests
         await using var test = await TestDatabase.CreateAsync();
         var people = new PersonStore(test.Database);
         var id = await test.PersonAsync("dave");
-        var before = (await people.FindAsync(id))!.SecurityStamp;
-        await people.UpdatePasswordAsync(id, "new-hash");
-        var after = (await people.FindAsync(id))!;
+        var before = (await people.FindAsync(id, TestContext.Current.CancellationToken))!.SecurityStamp;
+        await people.UpdatePasswordAsync(id, "new-hash", TestContext.Current.CancellationToken);
+        var after = (await people.FindAsync(id, TestContext.Current.CancellationToken))!;
         Assert.NotEqual(before, after.SecurityStamp);
         Assert.Equal("new-hash", after.PasswordHash);
-        await people.RecordSignInAsync(id, null);
-        Assert.NotNull((await people.FindAsync(id))!.LastSignInAt);
-        Assert.Single(await people.SearchAsync("DAV", 10));
+        await people.RecordSignInAsync(id, null, TestContext.Current.CancellationToken);
+        Assert.NotNull((await people.FindAsync(id, TestContext.Current.CancellationToken))!.LastSignInAt);
+        Assert.Single(await people.SearchAsync("DAV", 10, TestContext.Current.CancellationToken));
     }
 }
 
@@ -31638,10 +31658,10 @@ internal sealed partial class TestDatabase : IAsyncDisposable
 
 ================================================================================
 FILE:     tests/MyBlazorPlayground.Data.Tests/WorkStoreTests.cs
-SIZE:     10.83 KB (11088 bytes)
+SIZE:     13.30 KB (13621 bytes)
 LINES:    178
-SHA256:   2850f3a27cabbdd4b439d85124e5ca7cb24e97a56f7f336e98adc1f995d4ac81
-MODIFIED: 2026-11-19 10:46:01 (UTC)
+SHA256:   af36cfb52b954c860d70d649103aeea2f2e0bb167d5be8607dd06b815730e5c2
+MODIFIED: 2026-11-19 11:15:48 (UTC)
 ================================================================================
 
 using System.Security.Cryptography;
@@ -31663,16 +31683,16 @@ public sealed class WorkStoreTests
         var owner = await test.PersonAsync("owner");
         var stranger = await test.PersonAsync("stranger");
         var projects = new ProjectStore(test.Database);
-        var (created, id) = await projects.CreateAsync("PAMS", "Pams", "", owner, TestDatabase.Audit(owner));
+        var (created, id) = await projects.CreateAsync("PAMS", "Pams", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
         Assert.Equal(CreateProjectResult.Created, created);
-        Assert.Equal(CreateProjectResult.KeyTaken, (await projects.CreateAsync("PAMS", "Again", "", owner, TestDatabase.Audit(owner))).Result);
-        var mine = Assert.Single(await projects.ListAsync(owner, false));
+        Assert.Equal(CreateProjectResult.KeyTaken, (await projects.CreateAsync("PAMS", "Again", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken)).Result);
+        var mine = Assert.Single(await projects.ListAsync(owner, false, TestContext.Current.CancellationToken));
         Assert.Equal(PageRoles.Editor, mine.Role);
         Assert.Equal(1, mine.MemberCount);
-        Assert.Empty(await projects.ListAsync(stranger, false));
-        Assert.Single(await projects.ListAsync(stranger, true));
-        Assert.Null((await projects.FindAsync("PAMS", stranger))!.Role);
-        Assert.Equal(id, (await projects.FindByIdAsync(id, owner))!.Id);
+        Assert.Empty(await projects.ListAsync(stranger, false, TestContext.Current.CancellationToken));
+        Assert.Single(await projects.ListAsync(stranger, true, TestContext.Current.CancellationToken));
+        Assert.Null((await projects.FindAsync("PAMS", stranger, TestContext.Current.CancellationToken))!.Role);
+        Assert.Equal(id, (await projects.FindByIdAsync(id, owner, TestContext.Current.CancellationToken))!.Id);
         Assert.Equal(1L, await test.ScalarAsync<long>("SELECT count(*) FROM audit_event WHERE subject_id = @id", new { id = id.ToString() }));
     }
 
@@ -31683,16 +31703,16 @@ public sealed class WorkStoreTests
         var owner = await test.PersonAsync("owner");
         await test.PersonAsync("helper");
         var projects = new ProjectStore(test.Database);
-        var (_, id) = await projects.CreateAsync("TEAM", "Team", "", owner, TestDatabase.Audit(owner));
-        Assert.Equal(MemberChange.Changed, await projects.SetMemberAsync(id, "helper", PageRoles.Member, owner, TestDatabase.Audit(owner)));
-        Assert.Equal(MemberChange.Unchanged, await projects.SetMemberAsync(id, "helper", PageRoles.Member, owner, TestDatabase.Audit(owner)));
-        Assert.Equal(MemberChange.NotFound, await projects.SetMemberAsync(id, "nobody", PageRoles.Member, owner, TestDatabase.Audit(owner)));
-        Assert.Equal(MemberChange.LastEditor, await projects.SetMemberAsync(id, "owner", PageRoles.Member, owner, TestDatabase.Audit(owner)));
-        Assert.Equal(MemberChange.LastEditor, await projects.RemoveMemberAsync(id, owner, TestDatabase.Audit(owner)));
-        var members = await projects.MembersAsync(id);
+        var (_, id) = await projects.CreateAsync("TEAM", "Team", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
+        Assert.Equal(MemberChange.Changed, await projects.SetMemberAsync(id, "helper", PageRoles.Member, owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken));
+        Assert.Equal(MemberChange.Unchanged, await projects.SetMemberAsync(id, "helper", PageRoles.Member, owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken));
+        Assert.Equal(MemberChange.NotFound, await projects.SetMemberAsync(id, "nobody", PageRoles.Member, owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken));
+        Assert.Equal(MemberChange.LastEditor, await projects.SetMemberAsync(id, "owner", PageRoles.Member, owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken));
+        Assert.Equal(MemberChange.LastEditor, await projects.RemoveMemberAsync(id, owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken));
+        var members = await projects.MembersAsync(id, TestContext.Current.CancellationToken);
         Assert.Equal(2, members.Count);
         var helper = members.Single(member => member.UserName == "helper");
-        Assert.Equal(MemberChange.Changed, await projects.RemoveMemberAsync(id, helper.PersonId, TestDatabase.Audit(owner)));
+        Assert.Equal(MemberChange.Changed, await projects.RemoveMemberAsync(id, helper.PersonId, TestDatabase.Audit(owner), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -31703,40 +31723,40 @@ public sealed class WorkStoreTests
         var outsider = await test.PersonAsync("outsider");
         var projects = new ProjectStore(test.Database);
         var items = new WorkItemStore(test.Database);
-        var (_, project) = await projects.CreateAsync("ITEM", "Items", "", owner, TestDatabase.Audit(owner));
+        var (_, project) = await projects.CreateAsync("ITEM", "Items", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
 
-        var (epicId, epic) = await items.CreateAsync(project, Fields("Epic", WorkItemKinds.Epic), owner);
-        var (_, first) = await items.CreateAsync(project, Fields("First", parent: epicId, assignee: outsider), owner);
-        var (_, second) = await items.CreateAsync(project, Fields("Second"), owner);
+        var (epicId, epic) = await items.CreateAsync(project, Fields("Epic", WorkItemKinds.Epic), owner, TestContext.Current.CancellationToken);
+        var (_, first) = await items.CreateAsync(project, Fields("First", parent: epicId, assignee: outsider), owner, TestContext.Current.CancellationToken);
+        var (_, second) = await items.CreateAsync(project, Fields("Second"), owner, TestContext.Current.CancellationToken);
         Assert.Equal([1, 2, 3], new[] { epic, first, second });
 
-        var created = (await items.FindAsync(project, first))!;
+        var created = (await items.FindAsync(project, first, cancellationToken: TestContext.Current.CancellationToken))!;
         Assert.Null(created.AssigneeId);
         Assert.Equal(epicId, created.ParentId);
         Assert.Equal("OWNER", created.ReporterName);
 
-        Assert.True(await items.UpdateAsync(project, first, current => current with { Status = WorkItemStatuses.InProgress, AssigneeId = owner, Title = "First!" }, owner));
-        var updated = (await items.FindAsync(project, first))!;
+        Assert.True(await items.UpdateAsync(project, first, current => current with { Status = WorkItemStatuses.InProgress, AssigneeId = owner, Title = "First!" }, owner, TestContext.Current.CancellationToken));
+        var updated = (await items.FindAsync(project, first, cancellationToken: TestContext.Current.CancellationToken))!;
         Assert.Equal(WorkItemStatuses.InProgress, updated.Status);
         Assert.Equal(owner, updated.AssigneeId);
-        var history = await items.HistoryAsync(updated.Id);
+        var history = await items.HistoryAsync(updated.Id, TestContext.Current.CancellationToken);
         Assert.Equal(["created", "title", "status", "assignee"], history.Select(change => change.Field));
         Assert.Equal("In progress", history.Single(change => change.Field == "status").NewValue);
         Assert.Equal("OWNER", history.Single(change => change.Field == "assignee").NewValue);
 
-        Assert.True(await items.UpdateAsync(project, first, current => current, owner));
-        Assert.Equal(4, (await items.HistoryAsync(updated.Id)).Count);
+        Assert.True(await items.UpdateAsync(project, first, current => current, owner, TestContext.Current.CancellationToken));
+        Assert.Equal(4, (await items.HistoryAsync(updated.Id, TestContext.Current.CancellationToken)).Count);
 
-        Assert.Equal([epic, first, second], (await items.ListAsync(new WorkItemQuery(project))).Select(item => item.Number));
-        Assert.True(await items.MoveAsync(project, second, true));
-        Assert.Equal([epic, second, first], (await items.ListAsync(new WorkItemQuery(project))).Select(item => item.Number));
-        Assert.False(await items.MoveAsync(project, epic, true));
+        Assert.Equal([epic, first, second], (await items.ListAsync(new WorkItemQuery(project), TestContext.Current.CancellationToken)).Select(item => item.Number));
+        Assert.True(await items.MoveAsync(project, second, true, TestContext.Current.CancellationToken));
+        Assert.Equal([epic, second, first], (await items.ListAsync(new WorkItemQuery(project), TestContext.Current.CancellationToken)).Select(item => item.Number));
+        Assert.False(await items.MoveAsync(project, epic, true, TestContext.Current.CancellationToken));
 
-        Assert.Equal([first], (await items.ListAsync(new WorkItemQuery(project, Text: "first!"))).Select(item => item.Number));
-        Assert.Equal([second], (await items.ListAsync(new WorkItemQuery(project, Text: "#3"))).Select(item => item.Number));
-        Assert.Equal([epic], (await items.EpicsAsync(project)).Select(item => item.Number));
-        Assert.Equal([first], (await items.ChildrenAsync(epicId)).Select(item => item.Number));
-        Assert.Equal([first], (await items.AssignedToAsync(owner, 10)).Select(item => item.Number));
+        Assert.Equal([first], (await items.ListAsync(new WorkItemQuery(project, Text: "first!"), TestContext.Current.CancellationToken)).Select(item => item.Number));
+        Assert.Equal([second], (await items.ListAsync(new WorkItemQuery(project, Text: "#3"), TestContext.Current.CancellationToken)).Select(item => item.Number));
+        Assert.Equal([epic], (await items.EpicsAsync(project, TestContext.Current.CancellationToken)).Select(item => item.Number));
+        Assert.Equal([first], (await items.ChildrenAsync(epicId, TestContext.Current.CancellationToken)).Select(item => item.Number));
+        Assert.Equal([first], (await items.AssignedToAsync(owner, 10, TestContext.Current.CancellationToken)).Select(item => item.Number));
     }
 
     [Fact]
@@ -31747,15 +31767,15 @@ public sealed class WorkStoreTests
         var projects = new ProjectStore(test.Database);
         var sprints = new SprintStore(test.Database);
         var items = new WorkItemStore(test.Database);
-        var (_, project) = await projects.CreateAsync("SPRT", "Sprints", "", owner, TestDatabase.Audit(owner));
-        var one = await sprints.CreateAsync(project, new SprintDraft("One", "Goal", new DateOnly(2026, 11, 19), new DateOnly(2026, 12, 2)));
-        var two = await sprints.CreateAsync(project, new SprintDraft("Two", "", null, null));
-        var (_, open) = await items.CreateAsync(project, Fields("Open", sprint: one) with { Status = WorkItemStatuses.ToDo, Points = 3 }, owner);
-        var (_, done) = await items.CreateAsync(project, Fields("Done", sprint: one) with { Status = WorkItemStatuses.Done, Points = 5 }, owner);
+        var (_, project) = await projects.CreateAsync("SPRT", "Sprints", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
+        var one = await sprints.CreateAsync(project, new SprintDraft("One", "Goal", new DateOnly(2026, 11, 19), new DateOnly(2026, 12, 2)), TestContext.Current.CancellationToken);
+        var two = await sprints.CreateAsync(project, new SprintDraft("Two", "", null, null), TestContext.Current.CancellationToken);
+        var (_, open) = await items.CreateAsync(project, Fields("Open", sprint: one) with { Status = WorkItemStatuses.ToDo, Points = 3 }, owner, TestContext.Current.CancellationToken);
+        var (_, done) = await items.CreateAsync(project, Fields("Done", sprint: one) with { Status = WorkItemStatuses.Done, Points = 5 }, owner, TestContext.Current.CancellationToken);
 
-        Assert.Equal(SprintChange.Changed, await sprints.StartAsync(project, one));
-        Assert.Equal(SprintChange.AnotherIsActive, await sprints.StartAsync(project, two));
-        var active = (await sprints.FindAsync(project, one))!;
+        Assert.Equal(SprintChange.Changed, await sprints.StartAsync(project, one, TestContext.Current.CancellationToken));
+        Assert.Equal(SprintChange.AnotherIsActive, await sprints.StartAsync(project, two, TestContext.Current.CancellationToken));
+        var active = (await sprints.FindAsync(project, one, TestContext.Current.CancellationToken))!;
         Assert.Equal(SprintStates.Active, active.State);
         Assert.Equal(new DateOnly(2026, 11, 19), active.Starts);
         Assert.Equal(2, active.ItemCount);
@@ -31763,17 +31783,17 @@ public sealed class WorkStoreTests
         Assert.Equal(8, active.Points);
         Assert.Equal(5, active.DonePoints);
 
-        Assert.Equal(SprintChange.Changed, await sprints.CompleteAsync(project, one, null));
-        Assert.Equal(SprintChange.WrongState, await sprints.CompleteAsync(project, one, null));
-        var returned = (await items.FindAsync(project, open))!;
+        Assert.Equal(SprintChange.Changed, await sprints.CompleteAsync(project, one, null, TestContext.Current.CancellationToken));
+        Assert.Equal(SprintChange.WrongState, await sprints.CompleteAsync(project, one, null, TestContext.Current.CancellationToken));
+        var returned = (await items.FindAsync(project, open, cancellationToken: TestContext.Current.CancellationToken))!;
         Assert.Null(returned.SprintId);
         Assert.Equal(WorkItemStatuses.Backlog, returned.Status);
-        Assert.Equal(one, (await items.FindAsync(project, done))!.SprintId);
+        Assert.Equal(one, (await items.FindAsync(project, done, cancellationToken: TestContext.Current.CancellationToken))!.SprintId);
 
-        Assert.Equal(SprintChange.Changed, await sprints.StartAsync(project, two));
-        Assert.Equal(["Two", "One"], (await sprints.ListAsync(project)).Select(sprint => sprint.Name));
-        Assert.True(await sprints.UpdateAsync(project, two, new SprintDraft("Two b", "Ship", null, new DateOnly(2026, 12, 31))));
-        Assert.Equal("Two b", (await sprints.FindAsync(project, two))!.Name);
+        Assert.Equal(SprintChange.Changed, await sprints.StartAsync(project, two, TestContext.Current.CancellationToken));
+        Assert.Equal(["Two", "One"], (await sprints.ListAsync(project, TestContext.Current.CancellationToken)).Select(sprint => sprint.Name));
+        Assert.True(await sprints.UpdateAsync(project, two, new SprintDraft("Two b", "Ship", null, new DateOnly(2026, 12, 31)), TestContext.Current.CancellationToken));
+        Assert.Equal("Two b", (await sprints.FindAsync(project, two, TestContext.Current.CancellationToken))!.Name);
     }
 
     [Fact]
@@ -31781,13 +31801,13 @@ public sealed class WorkStoreTests
     {
         await using var test = await TestDatabase.CreateAsync();
         var owner = await test.PersonAsync("owner");
-        var (_, project) = await new ProjectStore(test.Database).CreateAsync("CMNT", "Comments", "", owner, TestDatabase.Audit(owner));
-        var (item, _) = await new WorkItemStore(test.Database).CreateAsync(project, Fields("Talk"), owner);
+        var (_, project) = await new ProjectStore(test.Database).CreateAsync("CMNT", "Comments", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
+        var (item, _) = await new WorkItemStore(test.Database).CreateAsync(project, Fields("Talk"), owner, TestContext.Current.CancellationToken);
         var comments = new CommentStore(test.Database);
-        var id = await comments.AddAsync(item, owner, "It's **done**; isn't it?");
-        Assert.True(await comments.EditAsync(item, id, "Edited"));
-        Assert.False(await comments.EditAsync(item, id, "Edited"));
-        var comment = Assert.Single(await comments.ListAsync(item));
+        var id = await comments.AddAsync(item, owner, "It's **done**; isn't it?", TestContext.Current.CancellationToken);
+        Assert.True(await comments.EditAsync(item, id, "Edited", TestContext.Current.CancellationToken));
+        Assert.False(await comments.EditAsync(item, id, "Edited", TestContext.Current.CancellationToken));
+        var comment = Assert.Single(await comments.ListAsync(item, TestContext.Current.CancellationToken));
         Assert.Equal("Edited", comment.Body);
         Assert.NotNull(comment.EditedAt);
         Assert.Equal("OWNER", comment.AuthorName);
@@ -31798,27 +31818,27 @@ public sealed class WorkStoreTests
     {
         await using var test = await TestDatabase.CreateAsync();
         var owner = await test.PersonAsync("owner");
-        var (_, project) = await new ProjectStore(test.Database).CreateAsync("FILE", "Files", "", owner, TestDatabase.Audit(owner));
-        var (item, _) = await new WorkItemStore(test.Database).CreateAsync(project, Fields("Files"), owner);
+        var (_, project) = await new ProjectStore(test.Database).CreateAsync("FILE", "Files", "", owner, TestDatabase.Audit(owner), TestContext.Current.CancellationToken);
+        var (item, _) = await new WorkItemStore(test.Database).CreateAsync(project, Fields("Files"), owner, TestContext.Current.CancellationToken);
         var attachments = new AttachmentStore(test.Database);
         var bytes = new byte[(AttachmentStore.ChunkSize * 2) + 1234];
         RandomNumberGenerator.Fill(bytes);
         bytes[0] = 0x89;
         "PNG\r\n\u001a\n"u8.CopyTo(bytes.AsSpan(1));
 
-        var stored = await attachments.UploadAsync(new AttachmentUpload(project, item, owner, "shot.png"), new MemoryStream(bytes), bytes.Length);
+        var stored = await attachments.UploadAsync(new AttachmentUpload(project, item, owner, "shot.png"), new MemoryStream(bytes), bytes.Length, TestContext.Current.CancellationToken);
         Assert.Equal(UploadOutcome.Stored, stored.Outcome);
         Assert.Equal("image/png", stored.Attachment!.ContentType);
         Assert.Equal(bytes.Length, stored.Attachment.Length);
         Assert.Equal(3L, await test.ScalarAsync<long>("SELECT count(*) FROM attachment_chunk WHERE attachment_id = @id", new { id = stored.Attachment.Id }));
 
         var copy = new MemoryStream();
-        await attachments.CopyToAsync(stored.Attachment.Id, copy);
+        await attachments.CopyToAsync(stored.Attachment.Id, copy, TestContext.Current.CancellationToken);
         Assert.Equal(bytes, copy.ToArray());
-        Assert.Single(await attachments.ListAsync(item));
+        Assert.Single(await attachments.ListAsync(item, TestContext.Current.CancellationToken));
 
-        Assert.Equal(UploadOutcome.TooLarge, (await attachments.UploadAsync(new AttachmentUpload(project, item, owner, "big.bin"), new MemoryStream(bytes), 1000)).Outcome);
-        Assert.Equal(UploadOutcome.Empty, (await attachments.UploadAsync(new AttachmentUpload(project, item, owner, "none.bin"), new MemoryStream(), 1000)).Outcome);
+        Assert.Equal(UploadOutcome.TooLarge, (await attachments.UploadAsync(new AttachmentUpload(project, item, owner, "big.bin"), new MemoryStream(bytes), 1000, TestContext.Current.CancellationToken)).Outcome);
+        Assert.Equal(UploadOutcome.Empty, (await attachments.UploadAsync(new AttachmentUpload(project, item, owner, "none.bin"), new MemoryStream(), 1000, TestContext.Current.CancellationToken)).Outcome);
         Assert.Equal(1L, await test.ScalarAsync<long>("SELECT count(*) FROM attachment"));
     }
 }
@@ -39183,9 +39203,9 @@ describe('enhance', () => {
 
 
 ===============================================================================
-EXPORT COMPLETED (UTC): 2026-11-19 11:11:49
-Total Files Exported:   357
-Total Source Size:      1.17 MB (1230947 bytes)
+EXPORT COMPLETED (UTC): 2026-11-19 11:28:18
+Total Files Exported:   358
+Total Source Size:      1.18 MB (1235942 bytes)
 Output File:            /home/kushal/src/dotnet/myblazorplayground/docs/llm/dump.txt
 ===============================================================================
-DUMP SHA256 (of all lines above this one): 1a44a98c6d68fbd175636aa55f58f226476e0fa511775a3947a26c0e4734b445
+DUMP SHA256 (of all lines above this one): a5fc73a917f428b2a73a1c8fac0dc2ad960f6b05f9c2b119b7f28416fd9131a0
