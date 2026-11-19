@@ -1,0 +1,193 @@
+kushal@fedora:~/src/dotnet/myblazorplayground$ ssh virginia
+Linux virginia 6.12.117+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.117-1 (2026-11-12) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Mon Nov 16 18:18:39 2026 from 100.105.139.82
+kushal@virginia:~$ cd ~/src/dotnet/; time git clone https://github.com/kusl/myblazorplayground --verbose
+Cloning into 'myblazorplayground'...
+POST git-upload-pack (175 bytes)
+POST git-upload-pack (202 bytes)
+remote: Enumerating objects: 530, done.
+remote: Counting objects: 100% (530/530), done.
+remote: Compressing objects: 100% (435/435), done.
+remote: Total 530 (delta 60), reused 527 (delta 57), pack-reused 0 (from 0)
+Receiving objects: 100% (530/530), 1.00 MiB | 11.52 MiB/s, done.
+Resolving deltas: 100% (60/60), done.
+
+real	0m0.610s
+user	0m0.283s
+sys	0m0.079s
+kushal@virginia:~/src/dotnet$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh up
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.075s
+user	0m0.062s
+sys	0m0.013s
+
+real	0m0.308s
+user	0m0.122s
+sys	0m0.018s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (up to date)
+
+real	0m0.274s
+user	0m0.083s
+sys	0m0.050s
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+[instance] created .env with a random database password (keep it; the database volume is initialized with it).
+[instance] building the web image
+[1/2] STEP 1/10: FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
+[1/2] STEP 2/10: WORKDIR /source
+--> Using cache 932277c5ef40b149a5a6956439b532366e7f2df8a71bf9e631b21dad0f6bb0e0
+--> 932277c5ef40
+[1/2] STEP 3/10: ARG SOURCE_REVISION=
+--> 672d125cf0ec
+[1/2] STEP 4/10: COPY .editorconfig Directory.Build.props Directory.Packages.props global.json ./
+--> 3f76fb67f15d
+[1/2] STEP 5/10: COPY src/MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj src/MyBlazorPlayground.Domain/
+--> de1928a35379
+[1/2] STEP 6/10: COPY src/MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj src/MyBlazorPlayground.Data/
+--> eacbfc9ff8b5
+[1/2] STEP 7/10: COPY src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj src/MyBlazorPlayground.Web/
+--> 7488fa14b16e
+[1/2] STEP 8/10: RUN dotnet restore src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj
+  Determining projects to restore...
+  Restored /source/src/MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj (in 542 ms).
+  Restored /source/src/MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj (in 3.69 sec).
+  Restored /source/src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj (in 3.69 sec).
+--> 45f6fceae297
+[1/2] STEP 9/10: COPY src/ src/
+--> e67abbc939ca
+[1/2] STEP 10/10: RUN dotnet publish src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj         --configuration Release         --no-restore         --output /app         -p:UseAppHost=false         -p:SourceRevisionId="${SOURCE_REVISION}"
+  MyBlazorPlayground.Domain -> /source/src/MyBlazorPlayground.Domain/bin/Release/net11.0/MyBlazorPlayground.Domain.dll
+  MyBlazorPlayground.Data -> /source/src/MyBlazorPlayground.Data/bin/Release/net11.0/MyBlazorPlayground.Data.dll
+  MyBlazorPlayground.Web -> /source/src/MyBlazorPlayground.Web/bin/Release/net11.0/MyBlazorPlayground.Web.dll
+  MyBlazorPlayground.Web -> /app/
+--> ad6d1f58d8cd
+[2/2] STEP 1/9: FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
+[2/2] STEP 2/9: WORKDIR /app
+--> Using cache b4b712609c916fc51320c3627601ec890ccc07e3aa9b6bb407bc4d756a3a471d
+--> b4b712609c91
+[2/2] STEP 3/9: RUN apt-get update     && apt-get install -y --no-install-recommends tzdata curl     && rm -rf /var/lib/apt/lists/*
+--> Using cache 652fc63f99222ad3f2d5066b21c81e4668758ed0bec1168b83dc08151cef9351
+--> 652fc63f9922
+[2/2] STEP 4/9: COPY --from=build /app .
+--> 24a8b7d19254
+[2/2] STEP 5/9: ENV ASPNETCORE_URLS=http://+:8080     ASPNETCORE_ENVIRONMENT=Production     DOTNET_EnableDiagnostics=0
+--> ca14ef4b3678
+[2/2] STEP 6/9: EXPOSE 8080
+--> 0fa348d02d07
+[2/2] STEP 7/9: USER $APP_UID
+--> 5ce1b2c070e7
+[2/2] STEP 8/9: HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=8 CMD curl -fsS http://127.0.0.1:8080/health/ready || exit 1
+WARN[0066] HEALTHCHECK is not supported for OCI image format and will be ignored. Must use `docker` format 
+--> 08fd131de837
+[2/2] STEP 9/9: ENTRYPOINT ["dotnet", "MyBlazorPlayground.Web.dll"]
+[2/2] COMMIT localhost/myblazorplayground-web:latest
+WARN[0066] HEALTHCHECK is not supported for OCI image format and will be ignored. Must use `docker` format 
+--> d6f23afa170d
+Successfully tagged localhost/myblazorplayground-web:latest
+d6f23afa170dd30d69475c4ad9271414a2911d403e259bfb79eef351e12982df
+[instance] starting postgres and web
+761bdc583b0237bd140bafd8b6a8c4c76c2b3d0251eb40b3b918111b4d2fcaf8
+Trying to pull docker.io/library/postgres:18-alpine...
+Getting image source signatures
+Copying blob f2d7cafd5afd done   | 
+Copying blob 4721f81aac5e done   | 
+Copying blob e69a9c2fdea7 done   | 
+Copying blob 1645cfdb7f22 done   | 
+Copying blob 881fc932939e skipped: already exists  
+Copying blob 3f4dea45886b done   | 
+Copying blob bbd27b019c4a done   | 
+Copying blob 45e02dc2fee3 done   | 
+Copying config 4ea77c7055 done   | 
+Writing manifest to image destination
+b5ebfcaeae17a53f65c78c0e9f93d358b90bd93f6d98456fb5ba3e0be48708b8
+myblazorplayground_postgres_1
+677533cae3e0076db00e7a30409ec187c9f40f6d2657c2f59787390043db38f5
+myblazorplayground_web_1
+[instance] waiting for http://127.0.0.1:8090/health/ready
+[instance] opening a quick tunnel to http://127.0.0.1:8090
+
+  my blazor playground is up.
+
+  Public URL:  https://functions-reductions-gibraltar-civic.trycloudflare.com
+  Local URL:   http://127.0.0.1:8090
+  Setup code:  {redacted}  (open https://functions-reductions-gibraltar-civic.trycloudflare.com/setup to create the first administrator)
+
+  The quick tunnel URL changes when the tunnel restarts. 'scripts/instance.sh url' prints the current one.
+
+https://functions-reductions-gibraltar-civic.trycloudflare.com
+
+real	1m33.224s
+user	0m34.897s
+sys	0m8.673s
+kushal@virginia:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh setup-code
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.009s
+user	0m0.005s
+sys	0m0.004s
+
+real	0m0.280s
+user	0m0.099s
+sys	0m0.030s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (up to date)
+
+real	0m0.274s
+user	0m0.091s
+sys	0m0.029s
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+{redacted}
+
+real	0m0.405s
+user	0m0.351s
+sys	0m0.071s
+kushal@virginia:~/src/dotnet/myblazorplayground$ exit
+logout
+Connection to virginia closed.
+kushal@fedora:~/src/dotnet/myblazorplayground$ 
