@@ -1,8 +1,8 @@
 ===============================================================================
 PROJECT EXPORT
-Generated (UTC): 2026-11-19 11:09:02
+Generated (UTC): 2026-11-19 11:11:45
 Project Path:    /home/kushal/src/dotnet/myblazorplayground
-Git Commit:      dfc570dad85ad3a0abf32f082a5fd2e8159e09ff
+Git Commit:      0ac8302dc8b41e37eeaf4efbcca99c179c61c80b
 Git Branch:      main
 Git Dirty:       no
 .NET SDK:        11.0.100-rc.3.26522.148
@@ -636,10 +636,10 @@ jobs:
 
 ================================================================================
 FILE:     .gitignore
-SIZE:     0.15 KB (156 bytes)
-LINES:    18
-SHA256:   963ed967a723367dd1aac3285dabdd07bc57df99408e902081a2804bbeac3d4a
-MODIFIED: 2026-11-19 10:12:59 (UTC)
+SIZE:     0.13 KB (137 bytes)
+LINES:    16
+SHA256:   7a0abe0d174de3f699ae7057234745a14aecd49870600004fcd13cda8a4770c0
+MODIFIED: 2026-11-19 11:10:21 (UTC)
 ================================================================================
 
 bin/
@@ -658,8 +658,6 @@ coverage/
 .env
 .env.*
 !.env.example
-*.tar.gz
-docs/llm/
 
 
 ================================================================================
@@ -39185,9 +39183,9 @@ describe('enhance', () => {
 
 
 ===============================================================================
-EXPORT COMPLETED (UTC): 2026-11-19 11:09:06
+EXPORT COMPLETED (UTC): 2026-11-19 11:11:49
 Total Files Exported:   357
-Total Source Size:      1.17 MB (1230966 bytes)
+Total Source Size:      1.17 MB (1230947 bytes)
 Output File:            /home/kushal/src/dotnet/myblazorplayground/docs/llm/dump.txt
 ===============================================================================
-DUMP SHA256 (of all lines above this one): f7c63c4991e796eeea2ecdeac79b0d482a4b63604c83b9a870b0764445c1c18d
+DUMP SHA256 (of all lines above this one): 1a44a98c6d68fbd175636aa55f58f226476e0fa511775a3947a26c0e4734b445
