@@ -37,7 +37,7 @@ else
     </div>
     @if (_events.Count == PageSize)
     {
-        <p><a href="admin/audit?before=@_events[^1].Id">Older</a></p>
+        <p><a href="admin/audit?before=@_events[^1].Seq">Older</a></p>
     }
 }
 
@@ -49,7 +49,7 @@ else
     private HttpContext HttpContext { get; set; } = default!;
 
     [SupplyParameterFromQuery]
-    public Guid? Before { get; set; }
+    public long? Before { get; set; }
 
     protected override async Task OnParametersSetAsync() => _events = await Audit.ListAsync(PageSize, Before, HttpContext.RequestAborted);
 }

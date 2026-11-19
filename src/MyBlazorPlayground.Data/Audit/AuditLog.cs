@@ -9,6 +9,8 @@ public sealed class AuditRecord
 {
     public Guid Id { get; init; }
 
+    public long Seq { get; init; }
+
     public DateTime OccurredAt { get; init; }
 
     public string? ActorName { get; init; }
@@ -47,15 +49,15 @@ public sealed class AuditLog(Database database)
             cancellationToken: cancellationToken));
     }
 
-    public async Task<IReadOnlyList<AuditRecord>> ListAsync(int limit, Guid? before, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AuditRecord>> ListAsync(int limit, long? before, CancellationToken cancellationToken = default)
     {
         await using var connection = await database.OpenAsync(cancellationToken);
         return (await connection.QueryAsync<AuditRecord>(new CommandDefinition(
             """
-            SELECT id, occurred_at, actor_name, action, subject_type, subject_id, summary
+            SELECT id, seq, occurred_at, actor_name, action, subject_type, subject_id, summary
             FROM audit_event
-            WHERE @before::uuid IS NULL OR id < @before::uuid
-            ORDER BY id DESC
+            WHERE @before::bigint IS NULL OR seq < @before::bigint
+            ORDER BY seq DESC
             LIMIT @limit
             """,
             new { limit, before },

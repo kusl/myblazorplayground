@@ -287,7 +287,7 @@ public sealed class WorkItemStore(Database database)
             SELECT e.occurred_at, p.display_name AS actor_name, e.field, e.old_value, e.new_value
             FROM work_item_event e LEFT JOIN person p ON p.id = e.actor_id
             WHERE e.work_item_id = @itemId
-            ORDER BY e.occurred_at, e.id
+            ORDER BY e.seq
             """,
             new { itemId },
             cancellationToken: cancellationToken))).AsList();
