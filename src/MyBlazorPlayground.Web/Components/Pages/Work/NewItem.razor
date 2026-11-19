@@ -1,0 +1,76 @@
+@page "/work/{Key}/items/new"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@inject WorkService Work
+@inject WorkItemStore Items
+@inject SprintStore Sprints
+@inject ProjectStore Projects
+@inject NavigationManager Navigation
+
+@if (_access is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <h1>Nothing here</h1>
+    <p class="lede">That project doesn't exist or you are not a member. <a href="work">Back to work</a>.</p>
+}
+else
+{
+    <PageTitle>@_access.Project.Name · New item</PageTitle>
+    <ProjectHeader Key="@_access.Key" Name="@_access.Project.Name" Active="new" />
+
+    <Notice Text="@_problem" Error="true" />
+
+    <form method="post" @formname="new-item" @onsubmit="CreateAsync" data-enhance class="form wide-form">
+        <AntiforgeryToken />
+        <ItemFields Value="Form" Members="_members" Sprints="_sprints" Epics="_epics" />
+        <RichEditor Id="new-description" Name="Form.Description" ProjectKey="@_access.Key" Value="@Form.Description" Placeholder="What, why, and how we know it is done." />
+        <div class="actions"><button type="submit">Create item</button></div>
+    </form>
+}
+
+@code {
+    private ProjectAccess? _access;
+    private IReadOnlyList<MemberRecord> _members = [];
+    private IReadOnlyList<SprintRecord> _sprints = [];
+    private IReadOnlyList<WorkItemSummary> _epics = [];
+    private string? _problem;
+
+    [Parameter]
+    public string Key { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "sprint")]
+    public Guid? Sprint { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "new-item")]
+    private ItemForm Form { get; set; } = default!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Form ??= new ItemForm { SprintId = Sprint };
+        _access = await Work.OpenAsync(Key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        if (_access is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        _members = await Projects.MembersAsync(_access.Project.Id, HttpContext.RequestAborted);
+        _sprints = await Sprints.ListAsync(_access.Project.Id, HttpContext.RequestAborted);
+        _epics = await Items.EpicsAsync(_access.Project.Id, HttpContext.RequestAborted);
+    }
+
+    private async Task CreateAsync()
+    {
+        var (problem, number) = await Work.CreateItemAsync(_access!, Form, HttpContext.RequestAborted);
+        if (problem is not null)
+        {
+            _problem = problem;
+            return;
+        }
+
+        Navigation.NavigateTo(_access!.ItemPath(number));
+    }
+}

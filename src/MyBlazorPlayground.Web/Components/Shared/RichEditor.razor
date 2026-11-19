@@ -1,0 +1,52 @@
+<div class="editor" data-editor data-upload="@UploadUrl" data-preview="@PreviewUrl">
+    <label for="@Id" class="@(HideLabel ? "visually-hidden" : "label")">@Label</label>
+    <textarea id="@Id" name="@Name" rows="@Rows" maxlength="@MaxLength" placeholder="@Placeholder" data-editor-input>@Value</textarea>
+    <div class="editor-bar">
+        <label class="button small secondary" data-editor-attach hidden>
+            Attach files
+            <input type="file" multiple class="visually-hidden" data-editor-files />
+        </label>
+        <button type="button" class="small secondary" data-editor-toggle hidden>Preview</button>
+        <span class="hint">Markdown works. Paste or drop screenshots and files.</span>
+        <output class="hint" data-editor-status></output>
+    </div>
+    <div class="editor-preview rich" data-editor-preview hidden></div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Id { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string ProjectKey { get; set; } = "";
+
+    [Parameter]
+    public int? ItemNumber { get; set; }
+
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public string Label { get; set; } = "Description";
+
+    [Parameter]
+    public bool HideLabel { get; set; }
+
+    [Parameter]
+    public int Rows { get; set; } = 10;
+
+    [Parameter]
+    public int MaxLength { get; set; } = RichText.MaxLength;
+
+    [Parameter]
+    public string? Placeholder { get; set; }
+
+    private string UploadUrl => ItemNumber is { } number
+        ? $"/work/{ProjectKey}/attachments?item={number}"
+        : $"/work/{ProjectKey}/attachments";
+
+    private string PreviewUrl => $"/work/{ProjectKey}/preview";
+}

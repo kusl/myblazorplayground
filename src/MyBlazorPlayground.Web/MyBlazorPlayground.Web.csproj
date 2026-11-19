@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <UserSecretsId>myblazorplayground-web</UserSecretsId>
+    <NoWarn>$(NoWarn);BL0016</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="7" />
+    <InternalsVisibleTo Include="MyBlazorPlayground.Web.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj" />
+    <ProjectReference Include="../MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="MyBlazorPlayground.Web.Infrastructure" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,128 @@
+@page "/admin/editors"
+@attribute [Authorize(Policy = IdentityRegistration.AdministratorPolicy)]
+@using MyBlazorPlayground.Data.Pages
+@using MyBlazorPlayground.Data.People
+@using MyBlazorPlayground.Data.Audit
+@using MyBlazorPlayground.Web.Administration
+@inject PageEditorStore Editors
+@inject PersonStore People
+@inject AuditLog Audit
+@inject LocalTime Clock
+
+<PageTitle>Page editors</PageTitle>
+
+<h1>Page editors</h1>
+<AdminTabs />
+
+<p class="lede">Editors of a page can delete and restore what was posted on it. Project editors are managed in each project's settings. Here you grant editors for home pages: use any key shown under <em>Known as</em> on a home, such as <code>zillow:29747113</code>.</p>
+
+<Notice Text="@_message" Error="@_error" />
+
+<EditForm Model="Grant" FormName="grant" OnSubmit="GrantAsync" Enhance class="form">
+    <div class="grid-fields">
+        <div class="field">
+            <label for="page">Home key</label>
+            <InputText id="page" @bind-Value="Grant.Key" placeholder="zillow:29747113" spellcheck="false" autocapitalize="off" required />
+        </div>
+        <div class="field">
+            <label for="user">User name</label>
+            <InputText id="user" @bind-Value="Grant.UserName" spellcheck="false" autocapitalize="off" required />
+        </div>
+    </div>
+    <div class="actions"><button type="submit">Make editor</button></div>
+</EditForm>
+
+<h2>Editors</h2>
+@if (_editors.Count == 0)
+{
+    <p class="empty">No page editors yet.</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table>
+            <thead><tr><th>Page</th><th>Editor</th><th>Since</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var editor in _editors)
+                {
+                    <tr>
+                        <td><code>@editor.PageKey</code></td>
+                        <td>@editor.DisplayName <span class="muted">@editor.UserName</span></td>
+                        <td>@Clock.Format(editor.GrantedAt)</td>
+                        <td>
+                            <form method="post" @formname="@($"revoke-{editor.PersonId:N}-{editor.PageKey}")" @onsubmit="() => RevokeAsync(editor)" data-enhance class="inline-form">
+                                <AntiforgeryToken />
+                                <button type="submit" class="small secondary">Revoke</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<PageEditorRecord> _editors = [];
+    private string? _message;
+    private bool _error;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "grant")]
+    private GrantModel Grant { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Grant ??= new GrantModel();
+        _editors = await Editors.ListAsync(HttpContext.RequestAborted);
+    }
+
+    private async Task GrantAsync()
+    {
+        var actor = HttpContext.User.ToActor()!;
+        var key = (Grant.Key ?? "").Trim();
+        if (!ListingKey.IsValid(key))
+        {
+            (_message, _error) = ("That is not a home key. Copy one from the Known as list on a home.", true);
+            return;
+        }
+
+        var person = await People.FindByUserNameAsync((Grant.UserName ?? "").Trim().ToLowerInvariant(), HttpContext.RequestAborted);
+        if (person is null || person.DisabledAt is not null)
+        {
+            (_message, _error) = ("There is no active account with that user name.", true);
+            return;
+        }
+
+        var page = NestModeration.PageKey(key);
+        if (await Editors.GrantAsync(page, person.Id, actor.PersonId, HttpContext.RequestAborted))
+        {
+            await Audit.WriteAsync(Audits.For(actor, "editor-granted", "page", page, $"{person.UserName} edits {page}"), HttpContext.RequestAborted);
+        }
+
+        (_message, _error) = ($"{person.UserName} is an editor of {key}.", false);
+        Grant = new GrantModel();
+        _editors = await Editors.ListAsync(HttpContext.RequestAborted);
+    }
+
+    private async Task RevokeAsync(PageEditorRecord editor)
+    {
+        var actor = HttpContext.User.ToActor()!;
+        if (await Editors.RevokeAsync(editor.PageKey, editor.PersonId, HttpContext.RequestAborted))
+        {
+            await Audit.WriteAsync(Audits.For(actor, "editor-revoked", "page", editor.PageKey, $"{editor.UserName} no longer edits {editor.PageKey}"), HttpContext.RequestAborted);
+        }
+
+        (_message, _error) = ($"{editor.UserName} is no longer an editor of {editor.PageKey}.", false);
+        _editors = await Editors.ListAsync(HttpContext.RequestAborted);
+    }
+
+    public sealed class GrantModel
+    {
+        public string? Key { get; set; }
+
+        public string? UserName { get; set; }
+    }
+}

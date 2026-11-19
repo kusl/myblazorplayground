@@ -1,0 +1,12 @@
+<li class="comment" data-id="@Id">
+    <div class="head"><time datetime="@EntryTime.Iso(Id)">@EntryTime.Label(Id)</time></div>
+    <p class="text">@Text</p>
+</li>
+
+@code {
+    [Parameter, EditorRequired]
+    public Guid Id { get; set; }
+
+    [Parameter, EditorRequired]
+    public string? Text { get; set; }
+}

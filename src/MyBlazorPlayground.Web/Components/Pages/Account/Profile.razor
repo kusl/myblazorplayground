@@ -1,0 +1,93 @@
+@page "/account"
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using MyBlazorPlayground.Domain.Accounts
+@inject AccountService Accounts
+@inject NavigationManager Navigation
+
+<PageTitle>Your account</PageTitle>
+
+<h1>Your account</h1>
+<p class="lede">Signed in as <strong>@HttpContext.User.UserName()</strong>@(HttpContext.User.IsAdministrator() ? ", administrator" : "").</p>
+
+<Notice Text="@_message" Error="@_error" />
+
+<h2>Display name</h2>
+<EditForm Model="Name" FormName="rename" OnSubmit="RenameAsync" Enhance class="form">
+    <div class="field">
+        <label for="display-name">Shown to others as</label>
+        <InputText id="display-name" @bind-Value="Name.DisplayName" maxlength="@AccountRules.MaxDisplayName" />
+    </div>
+    <div class="actions"><button type="submit">Save name</button></div>
+</EditForm>
+
+<h2>Password</h2>
+<EditForm Model="Password" FormName="password" OnSubmit="ChangePasswordAsync" Enhance class="form">
+    <div class="field">
+        <label for="current-password">Current password</label>
+        <InputText id="current-password" type="password" @bind-Value="Password.Current" autocomplete="current-password" required />
+    </div>
+    <div class="field">
+        <label for="new-password">New password</label>
+        <InputText id="new-password" type="password" @bind-Value="Password.Next" autocomplete="new-password" required minlength="@AccountRules.MinPassword" />
+    </div>
+    <div class="actions"><button type="submit">Change password</button></div>
+    <p class="hint">Changing your password signs you out everywhere else.</p>
+</EditForm>
+
+@code {
+    private string? _message;
+    private bool _error;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "rename")]
+    private RenameModel Name { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "password")]
+    private PasswordModel Password { get; set; } = default!;
+
+    protected override void OnInitialized()
+    {
+        Name ??= new RenameModel { DisplayName = HttpContext.User.DisplayName() };
+        Password ??= new PasswordModel();
+    }
+
+    private async Task RenameAsync()
+    {
+        var result = await Accounts.RenameAsync(HttpContext.User.PersonId()!.Value, Name.DisplayName, HttpContext.RequestAborted);
+        await RefreshAsync(result, "Saved.");
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        var result = await Accounts.ChangePasswordAsync(HttpContext.User.PersonId()!.Value, Password.Current, Password.Next, ClientAddress.Key(HttpContext.Connection.RemoteIpAddress), HttpContext.RequestAborted);
+        Password = new PasswordModel();
+        await RefreshAsync(result, "Password changed.");
+    }
+
+    private async Task RefreshAsync(AccountResult result, string success)
+    {
+        _error = !result.Succeeded;
+        _message = result.Problem ?? success;
+        if (result.Succeeded)
+        {
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, PlaygroundClaims.Create(result.Person!), new AuthenticationProperties { IsPersistent = true });
+            Name.DisplayName = result.Person!.DisplayName;
+        }
+    }
+
+    public sealed class RenameModel
+    {
+        public string? DisplayName { get; set; }
+    }
+
+    public sealed class PasswordModel
+    {
+        public string? Current { get; set; }
+
+        public string? Next { get; set; }
+    }
+}

@@ -1,0 +1,87 @@
+@page "/account/register"
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using MyBlazorPlayground.Domain.Accounts
+@inject AccountService Accounts
+@inject SetupGate Setup
+@inject NavigationManager Navigation
+
+<PageTitle>Create an account</PageTitle>
+
+<h1>Create an account</h1>
+
+@if (!_open)
+{
+    <Notice Text="Registration is closed. Ask an administrator for an account." Error="true" />
+}
+else
+{
+    <p class="lede">An account lets you join projects. An administrator or a project editor adds you to a project.</p>
+    <Notice Text="@_problem" Error="true" />
+    <EditForm Model="Form" FormName="register" OnSubmit="SubmitAsync" Enhance class="form">
+        <div class="field">
+            <label for="user-name">User name</label>
+            <InputText id="user-name" @bind-Value="Form.UserName" autocomplete="username" autocapitalize="off" spellcheck="false" required maxlength="@AccountRules.MaxUserName" />
+            <p class="hint">Lowercase letters, digits, dots, dashes and underscores.</p>
+        </div>
+        <div class="field">
+            <label for="display-name">Display name</label>
+            <InputText id="display-name" @bind-Value="Form.DisplayName" autocomplete="name" maxlength="@AccountRules.MaxDisplayName" />
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <InputText id="password" type="password" @bind-Value="Form.Password" autocomplete="new-password" required minlength="@AccountRules.MinPassword" />
+            <p class="hint">At least @AccountRules.MinPassword characters. A few unrelated words work well.</p>
+        </div>
+        <input type="hidden" name="Form.ReturnUrl" value="@ReturnUrl" />
+        <div class="actions">
+            <button type="submit">Create account</button>
+            <a href="account/sign-in">I already have one</a>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private string? _problem;
+    private bool _open;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "register")]
+    private RegisterModel Form { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Form ??= new RegisterModel();
+        _open = Setup.IsComplete && await Accounts.IsRegistrationOpenAsync(HttpContext.RequestAborted);
+    }
+
+    private async Task SubmitAsync()
+    {
+        var result = await Accounts.RegisterAsync(Form.UserName, Form.DisplayName, Form.Password, ClientAddress.Key(HttpContext.Connection.RemoteIpAddress), HttpContext.RequestAborted);
+        if (!result.Succeeded)
+        {
+            _problem = result.Problem;
+            Form.Password = null;
+            return;
+        }
+
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, PlaygroundClaims.Create(result.Person!), new AuthenticationProperties { IsPersistent = true });
+        Navigation.NavigateTo(LocalUrl.Or(Form.ReturnUrl, "/work"), forceLoad: true);
+    }
+
+    public sealed class RegisterModel
+    {
+        public string? UserName { get; set; }
+
+        public string? DisplayName { get; set; }
+
+        public string? Password { get; set; }
+
+        public string? ReturnUrl { get; set; }
+    }
+}

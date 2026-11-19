@@ -1,0 +1,79 @@
+@page "/admin/trash"
+@attribute [Authorize(Policy = IdentityRegistration.AdministratorPolicy)]
+@using MyBlazorPlayground.Data.Trash
+@using MyBlazorPlayground.Web.Administration
+@inject TrashService Trash
+@inject LocalTime Clock
+
+<PageTitle>Trash</PageTitle>
+
+<h1>Trash</h1>
+<AdminTabs />
+
+<p class="lede">Everything deleted on this site waits here. Restore puts it back. Delete forever removes it from the database and cannot be undone; it is written to the audit log either way.</p>
+
+<Notice Text="@_message" Error="@_error" />
+
+@if (_records.Count == 0)
+{
+    <p class="empty">The trash is empty.</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr><th>What</th><th>Where</th><th>Deleted</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var record in _records)
+                {
+                    <tr>
+                        <td><span class="badge">@SubjectNames.Label(record.Subject)</span> @record.Title</td>
+                        <td>@(record.ProjectKey ?? (record.Subject == Subject.NestEntry ? "Homes" : ""))</td>
+                        <td>@Clock.Format(record.DeletedAt)<br /><span class="muted">@(record.DeletedByName ?? "someone")</span></td>
+                        <td>
+                            <div class="actions">
+                                <form method="post" @formname="@($"restore-{record.Id:N}")" @onsubmit="() => RestoreAsync(record)" data-enhance class="inline-form">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="small secondary">Restore</button>
+                                </form>
+                                <form method="post" @formname="@($"purge-{record.Id:N}")" @onsubmit="() => PurgeAsync(record)" data-enhance class="inline-form">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="small danger">Delete forever</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<TrashRecord> _records = [];
+    private string? _message;
+    private bool _error;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync() => _records = await Trash.ListAsync(null, HttpContext.RequestAborted);
+
+    private async Task RestoreAsync(TrashRecord record)
+    {
+        var done = await Trash.RestoreAsync(HttpContext.User.ToActor()!, record.Subject, record.Id, HttpContext.RequestAborted);
+        _message = done ? $"Restored {record.Title}." : "That is no longer in the trash.";
+        _error = !done;
+        _records = await Trash.ListAsync(null, HttpContext.RequestAborted);
+    }
+
+    private async Task PurgeAsync(TrashRecord record)
+    {
+        var done = await Trash.HardDeleteAsync(HttpContext.User.ToActor()!, record.Subject, record.Id, HttpContext.RequestAborted);
+        _message = done ? $"Deleted {record.Title} for good." : "That is no longer in the trash.";
+        _error = !done;
+        _records = await Trash.ListAsync(null, HttpContext.RequestAborted);
+    }
+}

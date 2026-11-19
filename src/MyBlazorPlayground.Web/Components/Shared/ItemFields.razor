@@ -1,0 +1,89 @@
+@using MyBlazorPlayground.Data.Work
+
+<div class="field">
+    <label for="@($"{Prefix}-title")">Title</label>
+    <input id="@($"{Prefix}-title")" name="@($"{Prefix}.Title")" value="@Value.Title" maxlength="@WorkRules.MaxTitle" required />
+</div>
+<div class="grid-fields">
+    <div class="field">
+        <label for="@($"{Prefix}-kind")">Kind</label>
+        <select id="@($"{Prefix}-kind")" name="@($"{Prefix}.Kind")">
+            @foreach (var kind in WorkItemKinds.All)
+            {
+                <option value="@kind" selected="@(kind == Value.Kind)">@WorkItemKinds.Label(kind)</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="@($"{Prefix}-status")">Status</label>
+        <select id="@($"{Prefix}-status")" name="@($"{Prefix}.Status")">
+            @foreach (var status in WorkItemStatuses.All)
+            {
+                <option value="@status" selected="@(status == Value.Status)">@WorkItemStatuses.Label(status)</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="@($"{Prefix}-priority")">Priority</label>
+        <select id="@($"{Prefix}-priority")" name="@($"{Prefix}.Priority")">
+            @foreach (var priority in Priorities.All)
+            {
+                <option value="@priority" selected="@(priority == Value.Priority)">@Priorities.Label(priority)</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="@($"{Prefix}-points")">Points</label>
+        <input id="@($"{Prefix}-points")" name="@($"{Prefix}.Points")" type="number" inputmode="numeric" min="0" max="@WorkRules.MaxPoints" value="@Value.Points" />
+    </div>
+    <div class="field">
+        <label for="@($"{Prefix}-assignee")">Assignee</label>
+        <select id="@($"{Prefix}-assignee")" name="@($"{Prefix}.AssigneeId")">
+            <option value="">Nobody</option>
+            @foreach (var member in Members)
+            {
+                <option value="@member.PersonId" selected="@(member.PersonId == Value.AssigneeId)">@member.DisplayName</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="@($"{Prefix}-sprint")">Sprint</label>
+        <select id="@($"{Prefix}-sprint")" name="@($"{Prefix}.SprintId")">
+            <option value="">Backlog</option>
+            @foreach (var sprint in Sprints.Where(sprint => sprint.State != SprintStates.Completed || sprint.Id == Value.SprintId))
+            {
+                <option value="@sprint.Id" selected="@(sprint.Id == Value.SprintId)">@sprint.Name</option>
+            }
+        </select>
+    </div>
+    <div class="field">
+        <label for="@($"{Prefix}-parent")">Epic</label>
+        <select id="@($"{Prefix}-parent")" name="@($"{Prefix}.ParentId")">
+            <option value="">None</option>
+            @foreach (var epic in Epics.Where(epic => epic.Number != Number))
+            {
+                <option value="@epic.Id" selected="@(epic.Id == Value.ParentId)">#@epic.Number @epic.Title</option>
+            }
+        </select>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public ItemForm Value { get; set; } = new();
+
+    [Parameter]
+    public string Prefix { get; set; } = "Form";
+
+    [Parameter]
+    public int? Number { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<MemberRecord> Members { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<SprintRecord> Sprints { get; set; } = [];
+
+    [Parameter]
+    public IReadOnlyList<WorkItemSummary> Epics { get; set; } = [];
+}

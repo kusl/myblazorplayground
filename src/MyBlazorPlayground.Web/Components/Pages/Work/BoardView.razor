@@ -1,0 +1,117 @@
+@page "/work/{Key}/board"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@inject WorkService Work
+@inject WorkItemStore Items
+@inject SprintStore Sprints
+
+@if (_access is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <h1>Nothing here</h1>
+    <p class="lede">That project doesn't exist or you are not a member. <a href="work">Back to work</a>.</p>
+}
+else
+{
+    <PageTitle>@_access.Project.Name · Board</PageTitle>
+    <div class="wide">
+        <ProjectHeader Key="@_access.Key" Name="@_access.Project.Name" Active="board" />
+
+        @if (_active is { } sprint)
+        {
+            <p class="lede"><strong>@sprint.Name</strong>@(string.IsNullOrEmpty(sprint.Goal) ? "" : $": {sprint.Goal}") <span class="muted">· @sprint.DoneCount of @sprint.ItemCount done@(sprint.Ends is { } ends ? $" · ends {ends:yyyy-MM-dd}" : "")</span></p>
+        }
+        else
+        {
+            <p class="lede">No sprint is active, so the board shows every item that has left the backlog. <a href="@_access.Path("sprints")">Plan a sprint</a>.</p>
+        }
+
+        <Notice Text="@_message" Error="true" />
+
+        <div class="board" data-board>
+            @foreach (var status in WorkItemStatuses.Board)
+            {
+                var column = _items.Where(item => item.Status == status || (status == WorkItemStatuses.ToDo && item.Status == WorkItemStatuses.Backlog)).ToList();
+                <section class="column" data-status="@status" aria-labelledby="@($"column-{status}")">
+                    <h2 id="@($"column-{status}")"><span>@WorkItemStatuses.Label(status)</span> <span class="muted">@column.Count</span></h2>
+                    @foreach (var item in column)
+                    {
+                        var number = item.Number;
+                        <article class="card" data-card="@number" draggable="@(_access.CanEdit ? "true" : "false")">
+                            <a class="card-title" href="@_access.ItemPath(number)">@item.Title</a>
+                            <div class="meta">
+                                <span class="number">@_access.Key-@number</span>
+                                <span class="badge @item.Kind">@WorkItemKinds.Label(item.Kind)</span>
+                                <span class="badge priority-@item.Priority">@Priorities.Label(item.Priority)</span>
+                                @if (item.Points is { } points)
+                                {
+                                    <span>@points pt</span>
+                                }
+                                @if (item.AssigneeName is { } assignee)
+                                {
+                                    <span>@assignee</span>
+                                }
+                            </div>
+                            @if (_access.CanEdit)
+                            {
+                                <form method="post" @formname="@($"status-{number}")" @onsubmit="() => SetStatusAsync(number)" data-enhance data-card-form>
+                                    <AntiforgeryToken />
+                                    <label class="visually-hidden" for="@($"status-{number}")">Status</label>
+                                    <select id="@($"status-{number}")" name="status" data-card-status>
+                                        @foreach (var option in WorkItemStatuses.All)
+                                        {
+                                            <option value="@option" selected="@(option == item.Status)">@WorkItemStatuses.Label(option)</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="small secondary">Move</button>
+                                </form>
+                            }
+                        </article>
+                    }
+                </section>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private ProjectAccess? _access;
+    private SprintRecord? _active;
+    private IReadOnlyList<WorkItemSummary> _items = [];
+    private string? _message;
+
+    [Parameter]
+    public string Key { get; set; } = "";
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(Name = "status")]
+    private string? Status { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _access = await Work.OpenAsync(Key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        if (_access is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var sprints = await Sprints.ListAsync(_access!.Project.Id, HttpContext.RequestAborted);
+        _active = sprints.FirstOrDefault(sprint => sprint.State == SprintStates.Active);
+        var items = await Items.ListAsync(new WorkItemQuery(_access.Project.Id, SprintId: _active?.Id), HttpContext.RequestAborted);
+        _items = _active is null ? items.Where(item => item.Status != WorkItemStatuses.Backlog).ToList() : items;
+    }
+
+    private async Task SetStatusAsync(int number)
+    {
+        _message = await Work.SetStatusAsync(_access!, number, Status, HttpContext.RequestAborted);
+        await LoadAsync();
+    }
+}

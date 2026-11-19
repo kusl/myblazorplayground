@@ -1,0 +1,20 @@
+<p class="crumbs"><a href="work">Work</a> <span>/</span> <span>@Key</span></p>
+<h1>@Name</h1>
+<nav class="tabs" aria-label="Project">
+    <a href="@($"work/{Key}")" class="@(Active == "backlog" ? "active" : null)">Backlog</a>
+    <a href="@($"work/{Key}/board")" class="@(Active == "board" ? "active" : null)">Board</a>
+    <a href="@($"work/{Key}/sprints")" class="@(Active == "sprints" ? "active" : null)">Sprints</a>
+    <a href="@($"work/{Key}/items/new")" class="@(Active == "new" ? "active" : null)">New item</a>
+    <a href="@($"work/{Key}/settings")" class="@(Active == "settings" ? "active" : null)">Settings</a>
+</nav>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Key { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    [Parameter]
+    public string? Active { get; set; }
+}

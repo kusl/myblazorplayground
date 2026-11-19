@@ -1,0 +1,55 @@
+@page "/admin/audit"
+@attribute [Authorize(Policy = IdentityRegistration.AdministratorPolicy)]
+@using MyBlazorPlayground.Data.Audit
+@inject AuditLog Audit
+@inject LocalTime Clock
+
+<PageTitle>Audit log</PageTitle>
+
+<h1>Audit log</h1>
+<AdminTabs />
+
+<p class="lede">Sign ups, role changes, member changes, deletions, restores and permanent deletions, newest first.</p>
+
+@if (_events.Count == 0)
+{
+    <p class="empty">Nothing recorded yet.</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _events)
+                {
+                    <tr>
+                        <td><time datetime="@Clock.Iso(entry.OccurredAt)">@Clock.Format(entry.OccurredAt)</time></td>
+                        <td>@(entry.ActorName ?? "system")</td>
+                        <td><code>@entry.Action</code> <span class="muted">@entry.SubjectType</span></td>
+                        <td>@entry.Summary</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (_events.Count == PageSize)
+    {
+        <p><a href="admin/audit?before=@_events[^1].Id">Older</a></p>
+    }
+}
+
+@code {
+    private const int PageSize = 100;
+    private IReadOnlyList<AuditRecord> _events = [];
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    public Guid? Before { get; set; }
+
+    protected override async Task OnParametersSetAsync() => _events = await Audit.ListAsync(PageSize, Before, HttpContext.RequestAborted);
+}

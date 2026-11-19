@@ -1,0 +1,297 @@
+@page "/work/{Key}/items/{Number:int}"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@using MyBlazorPlayground.Domain.Files
+@inject WorkService Work
+@inject WorkItemStore Items
+@inject SprintStore Sprints
+@inject ProjectStore Projects
+@inject CommentStore Comments
+@inject AttachmentStore Attachments
+@inject LocalTime Clock
+@inject NavigationManager Navigation
+
+@if (_access is null || _item is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <h1>Nothing here</h1>
+    <p class="lede">That item doesn't exist, was deleted, or you are not a member of its project. <a href="work">Back to work</a>.</p>
+}
+else
+{
+    var key = _access.Key;
+    <PageTitle>@key-@_item.Number @_item.Title</PageTitle>
+    <p class="crumbs"><a href="work">Work</a> <span>/</span> <a href="@_access.Path()">@key</a> <span>/</span> <span>@key-@_item.Number</span></p>
+    <h1>@_item.Title</h1>
+    <p class="muted">
+        <span class="badge @_item.Kind">@WorkItemKinds.Label(_item.Kind)</span>
+        @WorkItemStatuses.Label(_item.Status) · <span class="badge priority-@_item.Priority">@Priorities.Label(_item.Priority)</span>
+        @if (_item.Points is { } points)
+        {
+            <span> · @points points</span>
+        }
+        · reported by @(_item.ReporterName ?? "someone") on @Clock.Format(_item.CreatedAt)
+    </p>
+
+    <Notice Text="@_message" Error="@_error" />
+
+    <div class="split">
+        <div class="stack">
+            <section aria-labelledby="description-title">
+                <h2 id="description-title" class="visually-hidden">Description</h2>
+                @if (string.IsNullOrWhiteSpace(_item.Description))
+                {
+                    <p class="empty">No description yet.</p>
+                }
+                else
+                {
+                    <div class="rich panel">@((MarkupString)_access.RenderRich(_item.Description))</div>
+                }
+            </section>
+
+            @if (_children.Count > 0)
+            {
+                <section aria-labelledby="children-title">
+                    <h2 id="children-title">In this epic</h2>
+                    <ul class="item-list">
+                        @foreach (var child in _children)
+                        {
+                            <li class="item-row">
+                                <div class="title">
+                                    <span class="number">@key-@child.Number</span>
+                                    <a href="@_access.ItemPath(child.Number)">@child.Title</a>
+                                    <span class="muted">@WorkItemStatuses.Label(child.Status)</span>
+                                </div>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+
+            <section aria-labelledby="files-title">
+                <h2 id="files-title">Files</h2>
+                @if (_attachments.Count == 0)
+                {
+                    <p class="empty">No files. Paste or drop them into the description or a comment.</p>
+                }
+                else
+                {
+                    <ul class="attachments">
+                        @foreach (var file in _attachments)
+                        {
+                            var fileId = file.Id;
+                            <li>
+                                @if (file.IsImage)
+                                {
+                                    <a href="@WorkEndpoints.FileUrl(file)"><img src="@WorkEndpoints.FileUrl(file)" alt="@file.FileName" loading="lazy" /></a>
+                                }
+                                <a href="@WorkEndpoints.FileUrl(file)">@file.FileName</a>
+                                <span class="muted">@FileRules.Size(file.Length) · @(file.UploadedByName ?? "someone")</span>
+                                @if (_access.CanDelete)
+                                {
+                                    <form method="post" @formname="@($"delete-file-{fileId:N}")" @onsubmit="() => DeleteFileAsync(file)" data-enhance class="inline-form">
+                                        <AntiforgeryToken />
+                                        <button type="submit" class="small danger">Delete</button>
+                                    </form>
+                                }
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            <section aria-labelledby="comments-title">
+                <h2 id="comments-title">Comments</h2>
+                @if (_comments.Count == 0)
+                {
+                    <p class="empty">No comments yet.</p>
+                }
+                <ol class="comments">
+                    @foreach (var comment in _comments)
+                    {
+                        var commentId = comment.Id;
+                        <li class="comment" id="@($"comment-{commentId:N}")">
+                            <header>
+                                <strong>@(comment.AuthorName ?? "someone")</strong>
+                                <span>@Clock.Format(comment.CreatedAt)@(comment.EditedAt is { } edited ? $" · edited {Clock.Format(edited)}" : "")</span>
+                            </header>
+                            <div class="rich">@((MarkupString)_access.RenderRich(comment.Body))</div>
+                            @if (AccessPolicy.CanEditComment(_access.Actor, _access.Role, comment.AuthorId ?? Guid.Empty) || _access.CanDelete)
+                            {
+                                <details>
+                                    <summary class="hint">Edit or delete</summary>
+                                    @if (AccessPolicy.CanEditComment(_access.Actor, _access.Role, comment.AuthorId ?? Guid.Empty))
+                                    {
+                                        <form method="post" @formname="@($"edit-comment-{commentId:N}")" @onsubmit="() => EditCommentAsync(commentId)" data-enhance class="stack">
+                                            <AntiforgeryToken />
+                                            <RichEditor Id="@($"comment-body-{commentId:N}")" Name="body" ProjectKey="@key" ItemNumber="_item.Number" Value="@comment.Body" Label="Comment" HideLabel="true" Rows="5" MaxLength="WorkRules.MaxComment" />
+                                            <div class="actions"><button type="submit" class="small">Save comment</button></div>
+                                        </form>
+                                    }
+                                    @if (_access.CanDelete)
+                                    {
+                                        <form method="post" @formname="@($"delete-comment-{commentId:N}")" @onsubmit="() => DeleteCommentAsync(commentId)" data-enhance class="inline-form">
+                                            <AntiforgeryToken />
+                                            <button type="submit" class="small danger">Delete comment</button>
+                                        </form>
+                                    }
+                                </details>
+                            }
+                        </li>
+                    }
+                </ol>
+                <form method="post" @formname="add-comment" @onsubmit="AddCommentAsync" data-enhance class="stack">
+                    <AntiforgeryToken />
+                    <RichEditor Id="new-comment" Name="body" ProjectKey="@key" ItemNumber="_item.Number" Label="Add a comment" Rows="4" MaxLength="WorkRules.MaxComment" Placeholder="Write a comment. Paste screenshots here." />
+                    <div class="actions"><button type="submit">Comment</button></div>
+                </form>
+            </section>
+
+            <section aria-labelledby="history-title">
+                <h2 id="history-title">History</h2>
+                <ol class="history">
+                    @foreach (var change in _history)
+                    {
+                        <li>@Clock.Format(change.OccurredAt) · @(change.ActorName ?? "someone") @Describe(change)</li>
+                    }
+                </ol>
+            </section>
+        </div>
+
+        <aside class="stack">
+            <section class="panel" aria-labelledby="edit-title">
+                <h2 id="edit-title">Details</h2>
+                <form method="post" @formname="edit-item" @onsubmit="SaveAsync" data-enhance class="form">
+                    <AntiforgeryToken />
+                    <ItemFields Value="Form!" Number="_item.Number" Members="_members" Sprints="_sprints" Epics="_epics" />
+                    <RichEditor Id="edit-description" Name="Form.Description" ProjectKey="@key" ItemNumber="_item.Number" Value="@Form!.Description" Rows="8" />
+                    <div class="actions"><button type="submit">Save</button></div>
+                </form>
+            </section>
+
+            @if (_access.CanDelete)
+            {
+                <section class="danger-zone" aria-labelledby="delete-title">
+                    <h2 id="delete-title">Delete</h2>
+                    <p>Moves this item to the trash. Editors can restore it from the project settings.</p>
+                    <form method="post" @formname="delete-item" @onsubmit="DeleteAsync" data-enhance>
+                        <AntiforgeryToken />
+                        <button type="submit" class="danger">Delete @key-@_item.Number</button>
+                    </form>
+                </section>
+            }
+        </aside>
+    </div>
+}
+
+@code {
+    private ProjectAccess? _access;
+    private WorkItemRecord? _item;
+    private IReadOnlyList<MemberRecord> _members = [];
+    private IReadOnlyList<SprintRecord> _sprints = [];
+    private IReadOnlyList<WorkItemSummary> _epics = [];
+    private IReadOnlyList<WorkItemSummary> _children = [];
+    private IReadOnlyList<CommentRecord> _comments = [];
+    private IReadOnlyList<AttachmentRecord> _attachments = [];
+    private IReadOnlyList<WorkItemEventRecord> _history = [];
+    private string? _message;
+    private bool _error;
+
+    [Parameter]
+    public string Key { get; set; } = "";
+
+    [Parameter]
+    public int Number { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "edit-item")]
+    private ItemForm? Form { get; set; }
+
+    [SupplyParameterFromForm(Name = "body")]
+    private string? Body { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _access = await Work.OpenAsync(Key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        if (_access is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await LoadAsync(Form is null);
+        if (_item is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    }
+
+    private async Task LoadAsync(bool resetForm)
+    {
+        var project = _access!.Project.Id;
+        var cancellation = HttpContext.RequestAborted;
+        _item = await Items.FindAsync(project, Number, cancellationToken: cancellation);
+        if (_item is null)
+        {
+            return;
+        }
+
+        if (resetForm)
+        {
+            Form = ItemForm.From(_item);
+        }
+
+        _members = await Projects.MembersAsync(project, cancellation);
+        _sprints = await Sprints.ListAsync(project, cancellation);
+        _epics = await Items.EpicsAsync(project, cancellation);
+        _children = _item.Kind == WorkItemKinds.Epic ? await Items.ChildrenAsync(_item.Id, cancellation) : [];
+        _comments = await Comments.ListAsync(_item.Id, cancellation);
+        _attachments = await Attachments.ListAsync(_item.Id, cancellation);
+        _history = await Items.HistoryAsync(_item.Id, cancellation);
+    }
+
+    private async Task SaveAsync() => await RunAsync(Work.UpdateItemAsync(_access!, Number, Form!, HttpContext.RequestAborted), "Saved.");
+
+    private async Task AddCommentAsync()
+    {
+        var problem = await Work.AddCommentAsync(_access!, _item!, Body, HttpContext.RequestAborted);
+        await AfterAsync(problem, "Comment added.");
+    }
+
+    private async Task EditCommentAsync(Guid id) => await RunAsync(Work.EditCommentAsync(_access!, _item!, id, Body, HttpContext.RequestAborted), "Comment saved.");
+
+    private async Task DeleteCommentAsync(Guid id) => await RunAsync(Work.DeleteCommentAsync(_access!, _item!, id, HttpContext.RequestAborted), "Comment moved to the trash.");
+
+    private async Task DeleteFileAsync(AttachmentRecord file) => await RunAsync(Work.DeleteAttachmentAsync(_access!, file, HttpContext.RequestAborted), "File moved to the trash.");
+
+    private async Task DeleteAsync()
+    {
+        var problem = await Work.DeleteItemAsync(_access!, _item!, HttpContext.RequestAborted);
+        if (problem is null)
+        {
+            Navigation.NavigateTo(_access!.Path());
+            return;
+        }
+
+        await AfterAsync(problem, null);
+    }
+
+    private async Task RunAsync(Task<string?> action, string success) => await AfterAsync(await action, success);
+
+    private async Task AfterAsync(string? problem, string? success)
+    {
+        _message = problem ?? success;
+        _error = problem is not null;
+        Body = null;
+        await LoadAsync(problem is null);
+    }
+
+    private static string Describe(WorkItemEventRecord change) => change.Field switch
+    {
+        "created" => $"created {change.NewValue}",
+        "description" => "edited the description",
+        _ => $"changed {change.Field} from {change.OldValue ?? "nothing"} to {change.NewValue ?? "nothing"}",
+    };
+}

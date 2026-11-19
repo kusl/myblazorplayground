@@ -1,0 +1,113 @@
+@page "/work"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@inject WorkService Work
+@inject WorkItemStore Items
+@inject NavigationManager Navigation
+
+<PageTitle>Work</PageTitle>
+
+<h1>Work</h1>
+<p class="lede">Projects you belong to, and what is on your plate.</p>
+
+<Notice Text="@_problem" Error="true" />
+
+<h2>Projects</h2>
+@if (_projects.Count == 0)
+{
+    <p class="empty">You are not in any project yet. Create one below, or ask a project editor to add you.</p>
+}
+else
+{
+    <ul class="cards-grid">
+        @foreach (var project in _projects)
+        {
+            <li>
+                <a class="project-card" href="@($"work/{project.Key}")">
+                    <strong>@project.Name</strong>
+                    <span class="number">@project.Key</span>
+                    <span class="muted">@project.OpenItems open · @project.MemberCount @(project.MemberCount == 1 ? "member" : "members") · @PageRoles.Label(project.Role)</span>
+                </a>
+            </li>
+        }
+    </ul>
+}
+
+<h2>Assigned to you</h2>
+@if (_assigned.Count == 0)
+{
+    <p class="empty">Nothing open is assigned to you.</p>
+}
+else
+{
+    <ul class="item-list">
+        @foreach (var item in _assigned)
+        {
+            <li class="item-row">
+                <div>
+                    <div class="title">
+                        <span class="number">@item.ProjectKey-@item.Number</span>
+                        <span class="badge @item.Kind">@WorkItemKinds.Label(item.Kind)</span>
+                        <a href="@($"work/{item.ProjectKey}/items/{item.Number}")">@item.Title</a>
+                    </div>
+                    <div class="meta">
+                        <span>@WorkItemStatuses.Label(item.Status)</span>
+                        <span class="badge priority-@item.Priority">@Priorities.Label(item.Priority)</span>
+                    </div>
+                </div>
+            </li>
+        }
+    </ul>
+}
+
+<h2>New project</h2>
+<EditForm Model="Form" FormName="new-project" OnSubmit="CreateAsync" Enhance class="form">
+    <div class="grid-fields">
+        <div class="field">
+            <label for="project-name">Name</label>
+            <InputText id="project-name" @bind-Value="Form.Name" maxlength="@WorkRules.MaxProjectName" required />
+        </div>
+        <div class="field">
+            <label for="project-key">Key</label>
+            <InputText id="project-key" @bind-Value="Form.Key" maxlength="@WorkRules.MaxProjectKey" autocapitalize="characters" spellcheck="false" placeholder="PAMS" required />
+            <p class="hint">Prefixes item numbers, such as PAMS-12.</p>
+        </div>
+    </div>
+    <div class="field">
+        <label for="project-description">Description</label>
+        <InputTextArea id="project-description" @bind-Value="Form.Description" rows="3" />
+    </div>
+    <div class="actions"><button type="submit">Create project</button></div>
+</EditForm>
+
+@code {
+    private IReadOnlyList<ProjectRecord> _projects = [];
+    private IReadOnlyList<WorkItemSummary> _assigned = [];
+    private string? _problem;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "new-project")]
+    private ProjectForm Form { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Form ??= new ProjectForm();
+        var actor = HttpContext.User.ToActor()!;
+        _projects = await Work.ProjectsAsync(actor, HttpContext.RequestAborted);
+        _assigned = await Items.AssignedToAsync(actor.PersonId, 50, HttpContext.RequestAborted);
+    }
+
+    private async Task CreateAsync()
+    {
+        var (problem, key) = await Work.CreateProjectAsync(HttpContext.User.ToActor()!, Form, HttpContext.RequestAborted);
+        if (problem is not null)
+        {
+            _problem = problem;
+            return;
+        }
+
+        Navigation.NavigateTo($"work/{key}");
+    }
+}

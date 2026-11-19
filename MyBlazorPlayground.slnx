@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="global.json" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="README.md" />
+    <File Path="compose.yaml" />
+    <File Path="Containerfile" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj" />
+    <Project Path="src/MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj" />
+    <Project Path="src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyBlazorPlayground.Domain.Tests/MyBlazorPlayground.Domain.Tests.csproj" />
+    <Project Path="tests/MyBlazorPlayground.Data.Tests/MyBlazorPlayground.Data.Tests.csproj" />
+    <Project Path="tests/MyBlazorPlayground.Web.Tests/MyBlazorPlayground.Web.Tests.csproj" />
+  </Folder>
+</Solution>

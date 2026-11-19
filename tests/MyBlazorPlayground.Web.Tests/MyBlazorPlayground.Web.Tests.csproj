@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../fixtures/nest/*.json" LinkBase="fixtures" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="MyBlazorPlayground.Web.Infrastructure" />
+    <Using Include="MyBlazorPlayground.Web.Chaos" />
+    <Using Include="MyBlazorPlayground.Web.Nest" />
+  </ItemGroup>
+
+</Project>

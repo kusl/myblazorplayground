@@ -1,0 +1,37 @@
+using System.Text.Json.Serialization;
+using MyBlazorPlayground.Web.Chaos.Messages;
+
+namespace MyBlazorPlayground.Web.Chaos.Slots;
+
+internal sealed record SlotSpin(Guid Id, int Remaining);
+
+internal sealed record SlotUpdate(
+    string Kind,
+    long Version,
+    long Previous,
+    IReadOnlyList<BoardMessage> Added,
+    IReadOnlyList<Guid> Removed,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SlotSpin? Spin,
+    IReadOnlyList<BoardMessage> WinnersAdded,
+    IReadOnlyList<Guid> WinnersRemoved,
+    IReadOnlyList<BoardMessage> JackpotsAdded)
+{
+    public static SlotUpdate Snapshot(
+        long version,
+        IReadOnlyList<BoardMessage> messages,
+        IReadOnlyList<BoardMessage> winners,
+        IReadOnlyList<BoardMessage> jackpots,
+        SlotSpin? spin) =>
+        new("snapshot", version, version, messages, [], spin, winners, [], jackpots);
+
+    public static SlotUpdate Delta(
+        long version,
+        long previous,
+        IReadOnlyList<BoardMessage> added,
+        IReadOnlyList<Guid> removed,
+        SlotSpin? spin,
+        IReadOnlyList<BoardMessage> winnersAdded,
+        IReadOnlyList<Guid> winnersRemoved,
+        IReadOnlyList<BoardMessage> jackpotsAdded) =>
+        new("delta", version, previous, added, removed, spin, winnersAdded, winnersRemoved, jackpotsAdded);
+}

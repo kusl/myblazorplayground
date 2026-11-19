@@ -1,0 +1,90 @@
+@page "/account/sign-in"
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@inject AccountService Accounts
+@inject SetupGate Setup
+@inject NavigationManager Navigation
+
+<PageTitle>Sign in</PageTitle>
+
+<h1>Sign in</h1>
+<p class="lede">You need an account for the project tracker. Everything else on this site works without one.</p>
+
+@if (!Setup.IsComplete)
+{
+    <Notice Text="This site has no administrator yet." Error="true" />
+    <p><a href="setup">Set it up first</a>.</p>
+}
+else
+{
+    <Notice Text="@_problem" Error="true" />
+    <EditForm Model="Form" FormName="sign-in" OnSubmit="SubmitAsync" Enhance class="form">
+        <div class="field">
+            <label for="user-name">User name</label>
+            <InputText id="user-name" @bind-Value="Form.UserName" autocomplete="username" autocapitalize="off" spellcheck="false" required />
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <InputText id="password" type="password" @bind-Value="Form.Password" autocomplete="current-password" required />
+        </div>
+        <label class="check"><InputCheckbox @bind-Value="Form.Remember" /> Keep me signed in on this device</label>
+        <input type="hidden" name="Form.ReturnUrl" value="@ReturnUrl" />
+        <div class="actions">
+            <button type="submit">Sign in</button>
+            @if (_registrationOpen)
+            {
+                <a href="account/register?returnUrl=@Uri.EscapeDataString(Target)">Create an account</a>
+            }
+        </div>
+    </EditForm>
+}
+
+@code {
+    private string? _problem;
+    private bool _registrationOpen;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "sign-in")]
+    private SignInModel Form { get; set; } = default!;
+
+    private string Target => LocalUrl.Or(Form?.ReturnUrl ?? ReturnUrl, "/work");
+
+    protected override async Task OnInitializedAsync()
+    {
+        Form ??= new SignInModel();
+        _registrationOpen = Setup.IsComplete && await Accounts.IsRegistrationOpenAsync(HttpContext.RequestAborted);
+    }
+
+    private async Task SubmitAsync()
+    {
+        var result = await Accounts.SignInAsync(Form.UserName, Form.Password, ClientAddress.Key(HttpContext.Connection.RemoteIpAddress), HttpContext.RequestAborted);
+        if (!result.Succeeded)
+        {
+            _problem = result.Problem;
+            Form.Password = null;
+            return;
+        }
+
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            PlaygroundClaims.Create(result.Person!),
+            new AuthenticationProperties { IsPersistent = Form.Remember });
+        Navigation.NavigateTo(Target, forceLoad: true);
+    }
+
+    public sealed class SignInModel
+    {
+        public string? UserName { get; set; }
+
+        public string? Password { get; set; }
+
+        public bool Remember { get; set; } = true;
+
+        public string? ReturnUrl { get; set; }
+    }
+}

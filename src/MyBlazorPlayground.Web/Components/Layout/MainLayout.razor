@@ -1,0 +1,63 @@
+@inherits LayoutComponentBase
+@inject TimeProvider Time
+@inject Microsoft.Extensions.Options.IOptions<SiteOptions> Site
+
+<header class="site-header">
+    <a class="brand" href="">@Site.Value.Name</a>
+    <div class="account">
+        <AuthorizeView>
+            <Authorized>
+                <a href="account" class="who">@context.User.DisplayName()</a>
+                @if (context.User.IsAdministrator())
+                {
+                    <a href="admin">Admin</a>
+                }
+                <form method="post" action="account/sign-out" class="sign-out">
+                    <AntiforgeryToken />
+                    <button type="submit" class="link">Sign out</button>
+                </form>
+            </Authorized>
+            <NotAuthorized>
+                <a href="account/sign-in">Sign in</a>
+            </NotAuthorized>
+        </AuthorizeView>
+        <ThemeToggle />
+    </div>
+    <nav aria-label="Main">
+        <NavLink href="work">Work</NavLink>
+        <NavLink href="homes">Homes</NavLink>
+        <NavLink href="board">Board</NavLink>
+        <NavLink href="postcard">Postcard</NavLink>
+        <NavLink href="canvas">Canvas</NavLink>
+        <NavLink href="slots">Slots</NavLink>
+        <NavLink href="latency">Latency</NavLink>
+        <NavLink href="read" data-enhance-nav="false">Read</NavLink>
+        <NavLink href="about">About</NavLink>
+    </nav>
+</header>
+
+<main>
+    @Body
+</main>
+
+<footer class="site-footer">
+    <span class="clock-wrap">Server time <time id="server-clock" class="clock" data-permanent="server-clock" data-now="@_now.UnixMs" data-offset="@_now.OffsetMinutes" datetime="@_now.Iso">@_now.Label</time></span>
+    <a href="@Site.Value.SourceUrl">Source code</a>
+    <span>AGPL-3.0-or-later</span>
+</footer>
+
+<p id="announcer" class="visually-hidden" aria-live="polite" data-permanent="announcer"></p>
+
+<ReconnectBanner />
+
+<div id="blazor-error-ui" data-nosnippet>
+    Something went wrong on this page.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss" aria-label="Dismiss">✕</span>
+</div>
+
+@code {
+    private ServerTime _now = new(0, 0);
+
+    protected override void OnInitialized() => _now = ServerTime.Now(Time);
+}

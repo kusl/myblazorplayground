@@ -1,0 +1,69 @@
+@page "/slots"
+@inject SlotService Slots
+@inject TimeProvider Time
+
+<PageTitle>Chaos slots</PageTitle>
+
+<h1>Slots</h1>
+<p class="lede">One shared machine and one big button. Whoever presses first spins for everyone, and nobody can press again until the reels stop. Three or more of a kind, or five climbing or falling, is a winner. Four or five of a kind, or an unbroken sequence like ABCDE or 43210, is a jackpot. Tap a winner to see how rare it was and why. Nothing is at stake.</p>
+
+<SlotIsland Client="@_client" Face="@_face" @rendermode="InteractiveServer" />
+
+<section class="feed" data-permanent="slots-jackpots-feed" aria-labelledby="jackpots-title">
+    <h2 id="jackpots-title">Jackpots</h2>
+    <p class="note">Every four or five of a kind and every sequence ever seen. Jackpots are never removed.</p>
+    <p id="slots-jackpots-empty" class="empty" hidden="@(_jackpots.Count > 0)">No jackpot yet.</p>
+    <ol id="slots-jackpots" class="spins">
+        @foreach (var result in _jackpots)
+        {
+            <SlotResult @key="result.Id" Id="result.Id" Text="@result.Text" Now="_now" />
+        }
+    </ol>
+</section>
+
+<section class="feed" data-permanent="slots-feed" aria-labelledby="spins-title">
+    <h2 id="spins-title">Results</h2>
+    <p id="slots-empty" class="empty" hidden="@(_results.Count > 0)">No spins yet. Press the button.</p>
+    <ol id="slots-feed" class="spins">
+        @foreach (var result in _results)
+        {
+            <SlotResult @key="result.Id" Id="result.Id" Text="@result.Text" Now="_now" />
+        }
+    </ol>
+    <button type="button" id="slots-older" class="older" hidden>Show older results</button>
+</section>
+
+<section class="feed" data-permanent="slots-winners-feed" aria-labelledby="winners-title">
+    <h2 id="winners-title">Winners</h2>
+    <p class="note">The newest @Slots.WinnerCapacity winning spins, kept after they leave the results.</p>
+    <p id="slots-winners-empty" class="empty" hidden="@(_winners.Count > 0)">No winners yet.</p>
+    <ol id="slots-winners" class="spins">
+        @foreach (var result in _winners)
+        {
+            <SlotResult @key="result.Id" Id="result.Id" Text="@result.Text" Now="_now" />
+        }
+    </ol>
+</section>
+
+@code {
+    private IReadOnlyList<BoardMessage> _results = [];
+    private IReadOnlyList<BoardMessage> _winners = [];
+    private IReadOnlyList<BoardMessage> _jackpots = [];
+    private DateTimeOffset _now;
+    private string _client = ClientAddress.Unknown;
+    private string? _face;
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    protected override void OnInitialized()
+    {
+        var spinning = Slots.Spinning?.Id;
+        _results = [.. Slots.Messages.Where(result => result.Id != spinning)];
+        _winners = [.. Slots.Winners.Where(result => result.Id != spinning)];
+        _jackpots = [.. Slots.Jackpots.Where(result => result.Id != spinning)];
+        _face = _results.Count > 0 ? _results[0].Text : null;
+        _now = Time.GetUtcNow();
+        _client = ClientAddress.Key(HttpContext?.Connection.RemoteIpAddress);
+    }
+}

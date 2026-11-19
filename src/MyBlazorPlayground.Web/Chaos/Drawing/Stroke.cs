@@ -1,0 +1,20 @@
+namespace MyBlazorPlayground.Web.Chaos.Drawing;
+
+internal sealed class Stroke(Guid id, int epoch, int clientId)
+{
+    private readonly List<int> _points = [];
+
+    public Guid Id { get; } = id;
+
+    public int Epoch { get; } = epoch;
+
+    public int ClientId { get; } = clientId;
+
+    public bool Done { get; set; }
+
+    public int Count => _points.Count / 2;
+
+    public void Append(IReadOnlyList<int> points) => _points.AddRange(points);
+
+    public int[] ToArray() => [.. _points];
+}

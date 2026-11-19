@@ -1,0 +1,48 @@
+<li class="home" data-key="@HomeKey">
+    <a href="@ListingKey.Path(HomeKey)">
+        <strong class="title">@Title</strong>
+        @if (Place is { Length: > 0 } && Place != Title)
+        {
+            <span class="place">@Place</span>
+        }
+        @if (Summary is { Length: > 0 })
+        {
+            <span class="summary">@Summary</span>
+        }
+        <span class="meta">
+            @if (Sources is { Length: > 0 })
+            {
+                <span>@Sources</span>
+            }
+            <span>@CommentsLabel</span>
+            <time datetime="@EntryTime.Iso(Updated)">@EntryTime.Label(Updated)</time>
+        </span>
+    </a>
+</li>
+
+@code {
+    [Parameter, EditorRequired]
+    public string HomeKey { get; set; } = "";
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = "";
+
+    [Parameter]
+    public string? Place { get; set; }
+
+    [Parameter]
+    public string? Summary { get; set; }
+
+    [Parameter]
+    public string? Sources { get; set; }
+
+    [Parameter, EditorRequired]
+    public int CommentCount { get; set; }
+
+    [Parameter, EditorRequired]
+    public Guid Updated { get; set; }
+
+    private string CommentsLabel => CommentCount == 1
+        ? "1 comment"
+        : string.Concat(CommentCount.ToString(System.Globalization.CultureInfo.InvariantCulture), " comments");
+}

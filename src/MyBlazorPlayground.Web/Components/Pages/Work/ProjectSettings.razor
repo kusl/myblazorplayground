@@ -1,0 +1,244 @@
+@page "/work/{Key}/settings"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@using MyBlazorPlayground.Data.Trash
+@using MyBlazorPlayground.Web.Administration
+@inject WorkService Work
+@inject ProjectStore Projects
+@inject TrashService Trash
+@inject LocalTime Clock
+@inject NavigationManager Navigation
+
+@if (_access is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <h1>Nothing here</h1>
+    <p class="lede">That project doesn't exist or you are not a member. <a href="work">Back to work</a>.</p>
+}
+else
+{
+    <PageTitle>@_access.Project.Name · Settings</PageTitle>
+    <ProjectHeader Key="@_access.Key" Name="@_access.Project.Name" Active="settings" />
+
+    <Notice Text="@_message" Error="@_error" />
+
+    <p>Your role: <strong>@(_access.Role is null ? "Administrator (not a member)" : PageRoles.Label(_access.Role))</strong>@(_access.Actor.IsAdministrator && _access.Role is not null ? ", and administrator" : "").</p>
+
+    @if (_access.CanManage)
+    {
+        <h2>Project</h2>
+        <form method="post" @formname="project" @onsubmit="SaveAsync" data-enhance class="form">
+            <AntiforgeryToken />
+            <div class="field">
+                <label for="project-name">Name</label>
+                <input id="project-name" name="Details.Name" value="@_access.Project.Name" maxlength="@WorkRules.MaxProjectName" required />
+            </div>
+            <div class="field">
+                <label for="project-description">Description</label>
+                <textarea id="project-description" name="Details.Description" rows="3">@_access.Project.Description</textarea>
+            </div>
+            <div class="actions"><button type="submit">Save</button></div>
+        </form>
+    }
+    else if (!string.IsNullOrWhiteSpace(_access.Project.Description))
+    {
+        <div class="rich">@((MarkupString)_access.RenderRich(_access.Project.Description))</div>
+    }
+
+    <h2>Members</h2>
+    <div class="table-scroll">
+        <table>
+            <thead><tr><th>Person</th><th>Role</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var member in _members)
+                {
+                    var personId = member.PersonId;
+                    <tr>
+                        <td><strong>@member.DisplayName</strong> <span class="muted">@member.UserName</span></td>
+                        <td>
+                            @if (_access.CanManage)
+                            {
+                                <form method="post" @formname="@($"role-{personId:N}")" @onsubmit="() => SetRoleAsync(member.UserName)" data-enhance class="actions">
+                                    <AntiforgeryToken />
+                                    <label class="visually-hidden" for="@($"role-{personId:N}")">Role of @member.UserName</label>
+                                    <select id="@($"role-{personId:N}")" name="role">
+                                        @foreach (var role in PageRoles.All)
+                                        {
+                                            <option value="@role" selected="@(role == member.Role)">@PageRoles.Label(role)</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="small secondary">Change</button>
+                                </form>
+                            }
+                            else
+                            {
+                                @PageRoles.Label(member.Role)
+                            }
+                        </td>
+                        <td>
+                            @if (_access.CanManage || personId == _access.Actor.PersonId)
+                            {
+                                <form method="post" @formname="@($"remove-{personId:N}")" @onsubmit="() => RemoveAsync(member)" data-enhance class="inline-form">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="small secondary">@(personId == _access.Actor.PersonId ? "Leave" : "Remove")</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (_access.CanManage)
+    {
+        <h3>Add someone</h3>
+        <form method="post" @formname="add-member" @onsubmit="AddAsync" data-enhance class="form">
+            <AntiforgeryToken />
+            <div class="grid-fields">
+                <div class="field">
+                    <label for="member-user">User name</label>
+                    <input id="member-user" name="user" autocapitalize="off" spellcheck="false" required />
+                </div>
+                <div class="field">
+                    <label for="member-role">Role</label>
+                    <select id="member-role" name="role">
+                        <option value="@PageRoles.Member">Member: can add and edit</option>
+                        <option value="@PageRoles.Editor">Editor: can also delete and manage members</option>
+                    </select>
+                </div>
+            </div>
+            <div class="actions"><button type="submit">Add</button></div>
+        </form>
+    }
+
+    @if (_access.CanDelete)
+    {
+        <h2>Trash</h2>
+        @if (_trash.Count == 0)
+        {
+            <p class="empty">Nothing from this project is in the trash.</p>
+        }
+        else
+        {
+            <ul class="item-list">
+                @foreach (var record in _trash)
+                {
+                    <li class="item-row">
+                        <div>
+                            <div class="title"><span class="badge">@SubjectNames.Label(record.Subject)</span> <span>@record.Title</span></div>
+                            <div class="meta">deleted @Clock.Format(record.DeletedAt) by @(record.DeletedByName ?? "someone")</div>
+                        </div>
+                        <form method="post" @formname="@($"restore-{record.Id:N}")" @onsubmit="() => RestoreAsync(record)" data-enhance class="inline-form">
+                            <AntiforgeryToken />
+                            <button type="submit" class="small secondary">Restore</button>
+                        </form>
+                    </li>
+                }
+            </ul>
+            <p class="hint">Only administrators can delete for good, from the site trash.</p>
+        }
+
+        <section class="danger-zone" aria-labelledby="delete-project">
+            <h2 id="delete-project">Delete project</h2>
+            <p>Moves the whole project to the trash. Only an administrator can restore it.</p>
+            <form method="post" @formname="delete-project" @onsubmit="DeleteProjectAsync" data-enhance class="form">
+                <AntiforgeryToken />
+                <div class="field">
+                    <label for="confirm-key">Type <code>@_access.Key</code> to confirm</label>
+                    <input id="confirm-key" name="confirm" autocapitalize="characters" spellcheck="false" required />
+                </div>
+                <div class="actions"><button type="submit" class="danger">Delete @_access.Key</button></div>
+            </form>
+        </section>
+    }
+}
+
+@code {
+    private ProjectAccess? _access;
+    private IReadOnlyList<MemberRecord> _members = [];
+    private IReadOnlyList<TrashRecord> _trash = [];
+    private string? _message;
+    private bool _error;
+
+    [Parameter]
+    public string Key { get; set; } = "";
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "project")]
+    private ProjectForm? Details { get; set; }
+
+    [SupplyParameterFromForm(Name = "role")]
+    private string? Role { get; set; }
+
+    [SupplyParameterFromForm(Name = "user")]
+    private string? MemberUser { get; set; }
+
+    [SupplyParameterFromForm(Name = "confirm")]
+    private string? Confirm { get; set; }
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _access = await Work.OpenAsync(Key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        if (_access is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        _members = await Projects.MembersAsync(_access.Project.Id, HttpContext.RequestAborted);
+        _trash = _access.CanDelete ? await Trash.ListAsync(_access.Project.Id, HttpContext.RequestAborted) : [];
+    }
+
+    private Task SaveAsync() => RunAsync(Work.UpdateProjectAsync(_access!, Details ?? new ProjectForm(), HttpContext.RequestAborted), "Saved.");
+
+    private Task SetRoleAsync(string userName) => RunAsync(Work.SetMemberAsync(_access!, userName, Role, HttpContext.RequestAborted), "Role changed.");
+
+    private Task AddAsync() => RunAsync(Work.SetMemberAsync(_access!, MemberUser, Role, HttpContext.RequestAborted), "Added.");
+
+    private async Task RemoveAsync(MemberRecord member)
+    {
+        var leaving = member.PersonId == _access!.Actor.PersonId;
+        var problem = await Work.RemoveMemberAsync(_access, member.PersonId, member.UserName, HttpContext.RequestAborted);
+        if (problem is null && leaving && !_access.Actor.IsAdministrator)
+        {
+            Navigation.NavigateTo("work");
+            return;
+        }
+
+        await AfterAsync(problem, $"{member.UserName} is no longer a member.");
+    }
+
+    private Task RestoreAsync(TrashRecord record) => RunAsync(Work.RestoreAsync(_access!, record, HttpContext.RequestAborted), $"Restored {record.Title}.");
+
+    private async Task DeleteProjectAsync()
+    {
+        if (!string.Equals((Confirm ?? "").Trim(), _access!.Key, StringComparison.OrdinalIgnoreCase))
+        {
+            await AfterAsync("Type the project key to confirm.", null);
+            return;
+        }
+
+        var problem = await Work.DeleteProjectAsync(_access, HttpContext.RequestAborted);
+        if (problem is null)
+        {
+            Navigation.NavigateTo("work");
+            return;
+        }
+
+        await AfterAsync(problem, null);
+    }
+
+    private async Task RunAsync(Task<string?> action, string success) => await AfterAsync(await action, success);
+
+    private async Task AfterAsync(string? problem, string? success)
+    {
+        _message = problem ?? success;
+        _error = problem is not null;
+        await LoadAsync();
+    }
+}

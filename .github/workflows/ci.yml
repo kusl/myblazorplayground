@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PLAYGROUND_TEST_DATABASE: Host=127.0.0.1;Port=5432;Database=postgres;Username=postgres;Password=test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 11.0.x
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - name: Build and test
+        run: scripts/test.sh
+
+      - name: Container image builds
+        run: docker build --file Containerfile --tag myblazorplayground-web:ci .
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: artifacts
+          path: artifacts/
+          if-no-files-found: ignore

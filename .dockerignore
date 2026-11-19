@@ -1,0 +1,8 @@
+*
+!.editorconfig
+!Directory.Build.props
+!Directory.Packages.props
+!global.json
+!src/
+src/**/bin/
+src/**/obj/

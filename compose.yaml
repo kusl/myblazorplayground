@@ -1,0 +1,42 @@
+name: myblazorplayground
+
+services:
+  postgres:
+    image: docker.io/library/postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-playground}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-playground}
+      POSTGRES_DB: ${POSTGRES_DB:-playground}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    ports:
+      - "127.0.0.1:${PLAYGROUND_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-playground} -d ${POSTGRES_DB:-playground}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        SOURCE_REVISION: ${SOURCE_REVISION:-}
+    image: localhost/myblazorplayground-web:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      ConnectionStrings__Playground: Host=postgres;Port=5432;Database=${POSTGRES_DB:-playground};Username=${POSTGRES_USER:-playground};Password=${POSTGRES_PASSWORD:-playground}
+      Site__Name: ${SITE_NAME:-my blazor playground}
+      Site__TimeZone: ${SITE_TIME_ZONE:-America/New_York}
+      Site__SourceUrl: ${SITE_SOURCE_URL:-https://github.com/kusl/myblazorplayground}
+      Work__MaxAttachmentBytes: ${WORK_MAX_ATTACHMENT_BYTES:-99614720}
+    ports:
+      - "127.0.0.1:${PLAYGROUND_WEB_PORT:-8090}:8080"
+
+volumes:
+  postgres-data:

@@ -1,0 +1,79 @@
+@page "/setup"
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using MyBlazorPlayground.Domain.Accounts
+@inject AccountService Accounts
+@inject SetupGate Setup
+@inject NavigationManager Navigation
+
+<PageTitle>Set up</PageTitle>
+
+<h1>Set up this site</h1>
+
+@if (Setup.IsComplete)
+{
+    <p class="lede">This site already has an administrator. <a href="account/sign-in">Sign in</a>.</p>
+}
+else
+{
+    <p class="lede">Create the first administrator. Administrators manage accounts, roles and the trash, and are the only ones who can delete anything for good.</p>
+    <p>The setup code is printed in the server log when the site starts without an administrator. With the container scripts, <code>scripts/instance.sh setup-code</code> shows it. It changes on every restart until setup is done.</p>
+    <Notice Text="@_problem" Error="true" />
+    <EditForm Model="Form" FormName="setup" OnSubmit="SubmitAsync" Enhance class="form">
+        <div class="field">
+            <label for="code">Setup code</label>
+            <InputText id="code" @bind-Value="Form.Code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" required />
+        </div>
+        <div class="field">
+            <label for="user-name">User name</label>
+            <InputText id="user-name" @bind-Value="Form.UserName" autocomplete="username" autocapitalize="off" spellcheck="false" required maxlength="@AccountRules.MaxUserName" />
+        </div>
+        <div class="field">
+            <label for="display-name">Display name</label>
+            <InputText id="display-name" @bind-Value="Form.DisplayName" autocomplete="name" maxlength="@AccountRules.MaxDisplayName" />
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <InputText id="password" type="password" @bind-Value="Form.Password" autocomplete="new-password" required minlength="@AccountRules.MinPassword" />
+            <p class="hint">At least @AccountRules.MinPassword characters.</p>
+        </div>
+        <div class="actions"><button type="submit">Create administrator</button></div>
+    </EditForm>
+}
+
+@code {
+    private string? _problem;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "setup")]
+    private SetupModel Form { get; set; } = default!;
+
+    protected override void OnInitialized() => Form ??= new SetupModel();
+
+    private async Task SubmitAsync()
+    {
+        var result = await Accounts.CreateFirstAdministratorAsync(Form.Code, Form.UserName, Form.DisplayName, Form.Password, ClientAddress.Key(HttpContext.Connection.RemoteIpAddress), HttpContext.RequestAborted);
+        if (!result.Succeeded)
+        {
+            _problem = result.Problem;
+            Form.Password = null;
+            return;
+        }
+
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, PlaygroundClaims.Create(result.Person!), new AuthenticationProperties { IsPersistent = true });
+        Navigation.NavigateTo("/admin", forceLoad: true);
+    }
+
+    public sealed class SetupModel
+    {
+        public string? Code { get; set; }
+
+        public string? UserName { get; set; }
+
+        public string? DisplayName { get; set; }
+
+        public string? Password { get; set; }
+    }
+}

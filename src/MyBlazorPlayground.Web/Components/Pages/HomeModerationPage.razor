@@ -1,0 +1,115 @@
+@page "/homes/{Provider}/{Token}/manage"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Nest
+@inject NestModeration Moderation
+@inject LocalTime Clock
+
+<PageTitle>Manage home entries</PageTitle>
+
+@if (_key is null || _home is null)
+{
+    <h1>Nothing here</h1>
+    <p class="lede">That isn't a home address on this site. Go back to <a href="homes">all homes</a>.</p>
+}
+else
+{
+    <p class="crumbs"><a href="homes">All homes</a> <span>/</span> <a href="@ListingKey.Path(_key)">@_home.Title</a></p>
+    <h1>Manage entries</h1>
+    @if (!_home.CanModerate)
+    {
+        <Notice Text="Only administrators and editors of this home can delete entries. You can still add and edit on the home page." Error="true" />
+    }
+    else
+    {
+        <p class="lede">Deleting removes an entry from the server and from every browser that connects. It goes to the trash, where an administrator can restore it or delete it for good.</p>
+    }
+
+    <Notice Text="@_message" Error="@_error" />
+
+    @if (_home.Entries.Count == 0)
+    {
+        <p class="empty">The server has no stored entries for this home.</p>
+    }
+    else
+    {
+        <ul class="item-list">
+            @foreach (var entry in _home.Entries)
+            {
+                <li class="item-row">
+                    <div>
+                        <div class="title">
+                            <span class="badge">@entry.Kind</span>
+                            @if (entry.DeletedAt is not null)
+                            {
+                                <span class="badge bug">deleted</span>
+                            }
+                            <span>@Describe(entry)</span>
+                        </div>
+                        <div class="meta"><span>@Clock.Format(Uuid7.Timestamp(entry.Id).UtcDateTime)</span></div>
+                    </div>
+                    @if (_home.CanModerate)
+                    {
+                        <div class="row-actions">
+                            @if (entry.DeletedAt is null)
+                            {
+                                <form method="post" @formname="@($"delete-{entry.Id:N}")" @onsubmit="() => DeleteAsync(entry)" data-enhance class="inline-form">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="small danger">Delete</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <form method="post" @formname="@($"restore-{entry.Id:N}")" @onsubmit="() => RestoreAsync(entry)" data-enhance class="inline-form">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="small secondary">Restore</button>
+                                </form>
+                            }
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    private string? _key;
+    private HomeModeration? _home;
+    private string? _message;
+    private bool _error;
+
+    [Parameter]
+    public string? Provider { get; set; }
+
+    [Parameter]
+    public string? Token { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _key = Provider is null ? null : ListingKey.Of(Provider, Token);
+        if (_key is not null)
+        {
+            _home = await Moderation.LoadAsync(_key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        }
+    }
+
+    private async Task DeleteAsync(NestEntryRecord entry)
+    {
+        var done = await Moderation.DeleteAsync(HttpContext.User.ToActor(), entry.Id, HttpContext.RequestAborted);
+        (_message, _error) = done ? ("Deleted.", false) : ("Could not delete that entry.", true);
+        _home = await Moderation.LoadAsync(_key!, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+    }
+
+    private async Task RestoreAsync(NestEntryRecord entry)
+    {
+        var done = await Moderation.RestoreAsync(HttpContext.User.ToActor(), entry.Id, HttpContext.RequestAborted);
+        (_message, _error) = done ? ("Restored.", false) : ("Could not restore that entry.", true);
+        _home = await Moderation.LoadAsync(_key!, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+    }
+
+    private static string Describe(NestEntryRecord entry) =>
+        entry.Text ?? entry.Url ?? (entry.Fields is { } fields ? fields : string.Join(", ", entry.Keys));
+}

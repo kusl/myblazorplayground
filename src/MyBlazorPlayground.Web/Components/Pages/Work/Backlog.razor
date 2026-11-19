@@ -1,0 +1,275 @@
+@page "/work/{Key}"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@inject WorkService Work
+@inject WorkItemStore Items
+@inject SprintStore Sprints
+@inject ProjectStore Projects
+@inject NavigationManager Navigation
+
+@if (_access is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <h1>Nothing here</h1>
+    <p class="lede">That project doesn't exist or you are not a member. <a href="work">Back to work</a>.</p>
+}
+else
+{
+    <PageTitle>@_access.Project.Name · Backlog</PageTitle>
+    <ProjectHeader Key="@_access.Key" Name="@_access.Project.Name" Active="backlog" />
+
+    <Notice Text="@_message" Error="@_error" />
+
+    @if (_access.CanEdit)
+    {
+        <EditForm Model="Quick" FormName="quick-add" OnSubmit="QuickAddAsync" Enhance class="form wide-form">
+            <div class="grid-fields">
+                <div class="field">
+                    <label for="quick-title">Add to the backlog</label>
+                    <InputText id="quick-title" @bind-Value="Quick.Title" maxlength="@WorkRules.MaxTitle" placeholder="What needs doing?" required />
+                </div>
+                <div class="field">
+                    <label for="quick-kind">Kind</label>
+                    <InputSelect id="quick-kind" @bind-Value="Quick.Kind">
+                        @foreach (var kind in WorkItemKinds.All)
+                        {
+                            <option value="@kind">@WorkItemKinds.Label(kind)</option>
+                        }
+                    </InputSelect>
+                </div>
+            </div>
+            <div class="actions">
+                <button type="submit">Add</button>
+                <a href="@_access.Path("items/new")">Add with details</a>
+            </div>
+        </EditForm>
+    }
+
+    <details class="filters" open="@Filtered">
+    <summary>Find and filter</summary>
+    <form method="get" class="form wide-form" action="@_access.Path()">
+        <div class="grid-fields">
+            <div class="field">
+                <label for="filter-text">Find</label>
+                <input id="filter-text" type="search" name="q" value="@Q" placeholder="Title or number" />
+            </div>
+            <div class="field">
+                <label for="filter-kind">Kind</label>
+                <select id="filter-kind" name="kind">
+                    <option value="">Any</option>
+                    @foreach (var kind in WorkItemKinds.All)
+                    {
+                        <option value="@kind" selected="@(kind == KindFilter)">@WorkItemKinds.Label(kind)</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label for="filter-assignee">Assignee</label>
+                <select id="filter-assignee" name="assignee">
+                    <option value="">Anyone</option>
+                    @foreach (var member in _members)
+                    {
+                        <option value="@member.PersonId" selected="@(member.PersonId == Assignee)">@member.DisplayName</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="actions">
+            <label class="check"><input type="checkbox" name="done" value="true" checked="@Done" /> Show done</label>
+            <button type="submit" class="secondary">Filter</button>
+        </div>
+    </form>
+    </details>
+
+    @foreach (var sprint in _sprints.Where(sprint => sprint.State != SprintStates.Completed))
+    {
+        <section aria-labelledby="@($"sprint-{sprint.Id:N}")">
+            <h2 id="@($"sprint-{sprint.Id:N}")">@sprint.Name <span class="badge">@SprintStates.Label(sprint.State)</span> <span class="muted">@sprint.DoneCount / @sprint.ItemCount done · @sprint.DonePoints / @sprint.Points points</span></h2>
+            @Rows(_items.Where(item => item.SprintId == sprint.Id).ToList())
+        </section>
+    }
+
+    <section aria-labelledby="backlog-title">
+        <h2 id="backlog-title">Backlog</h2>
+        @Rows(_items.Where(item => item.SprintId is null).ToList())
+    </section>
+}
+
+@code {
+    private ProjectAccess? _access;
+    private IReadOnlyList<WorkItemSummary> _items = [];
+    private IReadOnlyList<SprintRecord> _sprints = [];
+    private IReadOnlyList<MemberRecord> _members = [];
+    private string? _message;
+    private bool _error;
+
+    [Parameter]
+    public string Key { get; set; } = "";
+
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Q { get; set; }
+
+    [SupplyParameterFromQuery(Name = "kind")]
+    public string? KindFilter { get; set; }
+
+    [SupplyParameterFromQuery(Name = "assignee")]
+    public Guid? Assignee { get; set; }
+
+    [SupplyParameterFromQuery(Name = "done")]
+    public bool Done { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private bool Filtered => !string.IsNullOrWhiteSpace(Q) || KindFilter is { Length: > 0 } || Assignee is not null || Done;
+
+    [SupplyParameterFromForm(Name = "sprint")]
+    private string? PlanSprint { get; set; }
+
+    [SupplyParameterFromForm(FormName = "quick-add")]
+    private ItemForm Quick { get; set; } = default!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Quick ??= new ItemForm();
+        _access = await Work.OpenAsync(Key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        if (_access is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var project = _access!.Project.Id;
+        _sprints = await Sprints.ListAsync(project, HttpContext.RequestAborted);
+        _members = await Projects.MembersAsync(project, HttpContext.RequestAborted);
+        _items = await Items.ListAsync(
+            new WorkItemQuery(project, IncludeDone: Done, Kind: WorkItemKinds.IsKnown(KindFilter) ? KindFilter : null, AssigneeId: Assignee, Text: string.IsNullOrWhiteSpace(Q) ? null : Q),
+            HttpContext.RequestAborted);
+    }
+
+    private async Task QuickAddAsync()
+    {
+        if (_access is null)
+        {
+            return;
+        }
+
+        Quick.Status = WorkItemStatuses.Backlog;
+        var (problem, number) = await Work.CreateItemAsync(_access, Quick, HttpContext.RequestAborted);
+        if (problem is not null)
+        {
+            Say(problem, true);
+            return;
+        }
+
+        Quick = new ItemForm { Kind = Quick.Kind };
+        Say($"Added {_access.Key}-{number}.", false);
+        await LoadAsync();
+    }
+
+    private async Task MoveAsync(int number, bool up)
+    {
+        await Work.MoveAsync(_access!, number, up, HttpContext.RequestAborted);
+        await LoadAsync();
+    }
+
+    private async Task PlanAsync(int number, string? sprint)
+    {
+        var problem = await Work.SetSprintAsync(_access!, number, Guid.TryParse(sprint, out var id) ? id : null, HttpContext.RequestAborted);
+        if (problem is not null)
+        {
+            Say(problem, true);
+        }
+
+        await LoadAsync();
+    }
+
+    private void Say(string message, bool error)
+    {
+        _message = message;
+        _error = error;
+    }
+
+    private RenderFragment Rows(IReadOnlyList<WorkItemSummary> items) => __builder =>
+    {
+        var access = _access!;
+        var key = access.Key;
+        if (items.Count == 0)
+        {
+            <p class="empty">Nothing here.</p>
+            return;
+        }
+
+        <ol class="item-list">
+            @foreach (var item in items)
+            {
+                var number = item.Number;
+                <li class="item-row">
+                    <div>
+                        <div class="title">
+                            <span class="number">@key-@number</span>
+                            <span class="badge @item.Kind">@WorkItemKinds.Label(item.Kind)</span>
+                            <a href="@access.ItemPath(number)">@item.Title</a>
+                        </div>
+                        <div class="meta">
+                            <span>@WorkItemStatuses.Label(item.Status)</span>
+                            <span class="badge priority-@item.Priority">@Priorities.Label(item.Priority)</span>
+                            @if (item.Points is { } points)
+                            {
+                                <span>@points pt</span>
+                            }
+                            @if (item.AssigneeName is { } assignee)
+                            {
+                                <span>@assignee</span>
+                            }
+                            @if (item.ParentNumber is { } parent)
+                            {
+                                <span>in #@parent @item.ParentTitle</span>
+                            }
+                            @if (item.CommentCount > 0)
+                            {
+                                <span>@item.CommentCount @(item.CommentCount == 1 ? "comment" : "comments")</span>
+                            }
+                            @if (item.AttachmentCount > 0)
+                            {
+                                <span>@item.AttachmentCount @(item.AttachmentCount == 1 ? "file" : "files")</span>
+                            }
+                        </div>
+                    </div>
+                    @if (access.CanEdit)
+                    {
+                        <div class="row-actions">
+                            <form method="post" @formname="@($"up-{number}")" @onsubmit="() => MoveAsync(number, true)" data-enhance class="inline-form">
+                                <AntiforgeryToken />
+                                <button type="submit" class="small secondary" title="Move up" aria-label="@($"Move {key}-{number} up")">↑</button>
+                            </form>
+                            <form method="post" @formname="@($"down-{number}")" @onsubmit="() => MoveAsync(number, false)" data-enhance class="inline-form">
+                                <AntiforgeryToken />
+                                <button type="submit" class="small secondary" title="Move down" aria-label="@($"Move {key}-{number} down")">↓</button>
+                            </form>
+                            <details>
+                                <summary class="button small secondary">Plan</summary>
+                                <form method="post" @formname="@($"plan-{number}")" @onsubmit="() => PlanAsync(number, PlanSprint)" data-enhance class="stack">
+                                    <AntiforgeryToken />
+                                    <select name="sprint" aria-label="@($"Sprint for {key}-{number}")">
+                                        <option value="">Backlog</option>
+                                        @foreach (var sprint in _sprints.Where(sprint => sprint.State != SprintStates.Completed))
+                                        {
+                                            <option value="@sprint.Id" selected="@(sprint.Id == item.SprintId)">@sprint.Name</option>
+                                        }
+                                    </select>
+                                    <button type="submit" class="small">Move</button>
+                                </form>
+                            </details>
+                        </div>
+                    }
+                </li>
+            }
+        </ol>
+    };
+}

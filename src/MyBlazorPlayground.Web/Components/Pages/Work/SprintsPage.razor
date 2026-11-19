@@ -1,0 +1,190 @@
+@page "/work/{Key}/sprints"
+@attribute [Authorize]
+@using MyBlazorPlayground.Data.Work
+@inject WorkService Work
+@inject SprintStore Sprints
+
+@if (_access is null)
+{
+    <PageTitle>Not found</PageTitle>
+    <h1>Nothing here</h1>
+    <p class="lede">That project doesn't exist or you are not a member. <a href="work">Back to work</a>.</p>
+}
+else
+{
+    <PageTitle>@_access.Project.Name · Sprints</PageTitle>
+    <ProjectHeader Key="@_access.Key" Name="@_access.Project.Name" Active="sprints" />
+
+    <Notice Text="@_message" Error="@_error" />
+
+    @if (_sprints.Count == 0)
+    {
+        <p class="empty">No sprints yet. Teams that work in a continuous flow can skip sprints and use the board directly.</p>
+    }
+
+    <div class="stack">
+        @foreach (var sprint in _sprints)
+        {
+            var id = sprint.Id;
+            var percent = sprint.ItemCount == 0 ? 0 : (int)(100 * sprint.DoneCount / sprint.ItemCount);
+            <section class="panel" aria-labelledby="@($"sprint-{id:N}")">
+                <h2 id="@($"sprint-{id:N}")">@sprint.Name <span class="badge">@SprintStates.Label(sprint.State)</span></h2>
+                <p class="muted">@Dates(sprint) · @sprint.DoneCount of @sprint.ItemCount items · @sprint.DonePoints of @sprint.Points points</p>
+                <div class="progress" role="img" aria-label="@($"{percent} percent done")"><span class="w-@(percent / 5 * 5)"></span></div>
+                @if (!string.IsNullOrEmpty(sprint.Goal))
+                {
+                    <p>@sprint.Goal</p>
+                }
+
+                @if (_access.CanEdit)
+                {
+                    <div class="actions">
+                        @if (sprint.State == SprintStates.Planned)
+                        {
+                            <form method="post" @formname="@($"start-{id:N}")" @onsubmit="() => StartAsync(id)" data-enhance class="inline-form">
+                                <AntiforgeryToken />
+                                <button type="submit" class="small">Start sprint</button>
+                            </form>
+                        }
+                        @if (sprint.State == SprintStates.Active)
+                        {
+                            <form method="post" @formname="@($"complete-{id:N}")" @onsubmit="() => CompleteAsync(id)" data-enhance class="actions">
+                                <AntiforgeryToken />
+                                <label for="@($"target-{id:N}")">Open items go to</label>
+                                <select id="@($"target-{id:N}")" name="target">
+                                    <option value="">Backlog</option>
+                                    @foreach (var next in _sprints.Where(candidate => candidate.State == SprintStates.Planned))
+                                    {
+                                        <option value="@next.Id">@next.Name</option>
+                                    }
+                                </select>
+                                <button type="submit" class="small">Complete sprint</button>
+                            </form>
+                        }
+                        @if (_access.CanDelete && sprint.State != SprintStates.Active)
+                        {
+                            <form method="post" @formname="@($"delete-{id:N}")" @onsubmit="() => DeleteAsync(sprint)" data-enhance class="inline-form">
+                                <AntiforgeryToken />
+                                <button type="submit" class="small danger">Delete</button>
+                            </form>
+                        }
+                    </div>
+                    @if (sprint.State != SprintStates.Completed)
+                    {
+                        <details>
+                            <summary>Edit</summary>
+                            <form method="post" @formname="@($"edit-{id:N}")" @onsubmit="() => UpdateAsync(id)" data-enhance class="form">
+                                <AntiforgeryToken />
+                                @Fields(sprint.Name, sprint.Goal, sprint.Starts, sprint.Ends, $"edit-{id:N}")
+                                <div class="actions"><button type="submit" class="small">Save</button></div>
+                            </form>
+                        </details>
+                    }
+                }
+            </section>
+        }
+    </div>
+
+    @if (_access.CanEdit)
+    {
+        <h2>New sprint</h2>
+        <form method="post" @formname="new-sprint" @onsubmit="CreateAsync" data-enhance class="form">
+            <AntiforgeryToken />
+            @Fields($"Sprint {_sprints.Count + 1}", null, null, null, "new")
+            <div class="actions"><button type="submit">Create sprint</button></div>
+        </form>
+    }
+}
+
+@code {
+    private ProjectAccess? _access;
+    private IReadOnlyList<SprintRecord> _sprints = [];
+    private string? _message;
+    private bool _error;
+
+    [Parameter]
+    public string Key { get; set; } = "";
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm(Name = "name")]
+    private string? Name { get; set; }
+
+    [SupplyParameterFromForm(Name = "goal")]
+    private string? Goal { get; set; }
+
+    [SupplyParameterFromForm(Name = "starts")]
+    private DateOnly? Starts { get; set; }
+
+    [SupplyParameterFromForm(Name = "ends")]
+    private DateOnly? Ends { get; set; }
+
+    [SupplyParameterFromForm(Name = "target")]
+    private Guid? Target { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _access = await Work.OpenAsync(Key, HttpContext.User.ToActor(), HttpContext.RequestAborted);
+        if (_access is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _sprints = await Sprints.ListAsync(_access!.Project.Id, HttpContext.RequestAborted);
+
+    private SprintForm Posted() => new() { Name = Name, Goal = Goal, StartsOn = Starts, EndsOn = Ends };
+
+    private Task CreateAsync() => RunAsync(Work.CreateSprintAsync(_access!, Posted(), HttpContext.RequestAborted), "Sprint created.");
+
+    private Task UpdateAsync(Guid id) => RunAsync(Work.UpdateSprintAsync(_access!, id, Posted(), HttpContext.RequestAborted), "Saved.");
+
+    private Task StartAsync(Guid id) => RunAsync(Work.StartSprintAsync(_access!, id, HttpContext.RequestAborted), "Sprint started.");
+
+    private Task CompleteAsync(Guid id) => RunAsync(Work.CompleteSprintAsync(_access!, id, Target, HttpContext.RequestAborted), "Sprint completed.");
+
+    private Task DeleteAsync(SprintRecord sprint) => RunAsync(Work.DeleteSprintAsync(_access!, sprint, HttpContext.RequestAborted), "Sprint moved to the trash. Its items are back in the backlog until it is restored.");
+
+    private async Task RunAsync(Task<string?> action, string success)
+    {
+        var problem = await action;
+        _message = problem ?? success;
+        _error = problem is not null;
+        await LoadAsync();
+    }
+
+    private static string Dates(SprintRecord sprint) =>
+        (sprint.Starts, sprint.Ends) switch
+        {
+            ({ } starts, { } ends) => $"{starts:yyyy-MM-dd} to {ends:yyyy-MM-dd}",
+            ({ } starts, null) => $"from {starts:yyyy-MM-dd}",
+            (null, { } ends) => $"until {ends:yyyy-MM-dd}",
+            _ => "no dates",
+        };
+
+    private static RenderFragment Fields(string? name, string? goal, DateOnly? starts, DateOnly? ends, string prefix) => __builder =>
+    {
+        <div class="field">
+            <label for="@($"{prefix}-name")">Name</label>
+            <input id="@($"{prefix}-name")" name="name" value="@name" maxlength="@WorkRules.MaxSprintName" required />
+        </div>
+        <div class="field">
+            <label for="@($"{prefix}-goal")">Goal</label>
+            <textarea id="@($"{prefix}-goal")" name="goal" rows="2" maxlength="@WorkRules.MaxGoal">@goal</textarea>
+        </div>
+        <div class="grid-fields">
+            <div class="field">
+                <label for="@($"{prefix}-starts")">Starts</label>
+                <input id="@($"{prefix}-starts")" type="date" name="starts" value="@starts?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)" />
+            </div>
+            <div class="field">
+                <label for="@($"{prefix}-ends")">Ends</label>
+                <input id="@($"{prefix}-ends")" type="date" name="ends" value="@ends?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)" />
+            </div>
+        </div>
+    };
+}

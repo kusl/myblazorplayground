@@ -1,0 +1,93 @@
+@page "/about"
+
+<PageTitle>About</PageTitle>
+
+<h1>About</h1>
+<p class="lede">This site has three parts: a project tracker that needs an account, a house hunting notebook, and a set of shared toys. The last two work without an account.</p>
+
+<h2>Accounts and roles</h2>
+<ul>
+    <li>Most of the site needs no account. Accounts are only needed for the <a href="work">project tracker</a> and for deleting things.</li>
+    <li>The first account is created at <code>/setup</code> with a one-time code from the server log, and becomes an <strong>administrator</strong>. Administrators manage accounts, grant roles and see the audit log.</li>
+    <li>Each project has <strong>editors</strong> and <strong>members</strong>. Members can add and edit anything in the project. Editors can also delete, restore and manage members. Administrators can do everything editors can, everywhere.</li>
+    <li>Nobody else can delete anything. You may edit, but not delete.</li>
+    <li>Deleting moves things to the trash. Only administrators can delete for good, and every deletion, restore and permanent deletion is written to the audit log.</li>
+    <li>Home pages can have editors too, granted by an administrator. They can delete entries posted on that home.</li>
+</ul>
+
+<h2>Work</h2>
+<p>Projects hold work items: stories, tasks, bugs and epics. Items move through backlog, to do, in progress, in review and done. Plan items into sprints, start one sprint at a time, and follow it on the board. On a phone, swipe between board columns or pick a status from the list on each card; on a computer you can also drag cards between columns.</p>
+<p>Descriptions and comments take Markdown. Paste or drop screenshots and files into them and they are uploaded and linked where the cursor is. Files are stored in the database, in one-megabyte pieces.</p>
+
+<h2>Homes</h2>
+<p>Paste a link to a home from Zillow, Redfin, Realtor.com or any other site, or add one by its address. Anyone can fill in the details and leave comments. Every entry is stored in the database and also in each browser that sees it. If the server ever loses an entry, browsers offer it back.</p>
+<h3>How the same home is recognized</h3>
+<p>Every home is known by one or more IDs:</p>
+<ul>
+    <li>A Zillow ID (<code>zpid</code>), Redfin ID or Realtor.com property ID, read from the link. Query strings, tracking codes and the address part of the link are ignored, so <code>zillow.com/homedetails/2893-State-Route-26-…/29747113_zpid/</code> and <code>zillow.com/homedetails/29747113_zpid/?utm_source=share</code> are the same home.</li>
+    <li>The street address and ZIP code, in a standard form: <code>Street</code> and <code>St</code>, <code>Route</code> and <code>Rte</code>, <code>Apt 4</code> and <code>#4</code> all match.</li>
+    <li>For other sites, the link itself without its query string.</li>
+</ul>
+<p>Everything anyone adds is filed under all the IDs its home had at that moment. Anything that shares an ID with anything else ends up on the same page. So if one person adds a Zillow link and its address, and later someone else adds a Redfin link with the same address, both appear on one page, with every detail and comment from both.</p>
+<p>When two people set the same detail, the newest value wins and the one before it is shown next to it. Comments are never merged away; they are listed oldest first.</p>
+<p>Merging cannot be undone. A wrong link or address joins two homes for everyone who has seen it.</p>
+
+
+<h2>Toys</h2>
+<p>The board, postcard, canvas, slots and latency test are shared live with everyone on the page. The server keeps very little of them, in memory, and forgets it when it restarts; each browser keeps its own copy and offers it back.</p>
+<h3>What you can do</h3>
+<dl>
+    <dt><a href="board">Board</a></dt>
+    <dd>Post a message of up to 500 characters. Everyone on the board sees it at once. The server keeps the newest 50. This browser keeps up to 10,000 on your device, so you still see messages after the server has forgotten them. Those have a dotted border. Your own messages are marked <em>Your message</em> in this browser only. You can choose to attach your location and some browser details to your messages; see <a href="about#location">Location and details</a>.</dd>
+    <dt><a href="postcard">Postcard</a></dt>
+    <dd>Send a postcard of up to 5,000 characters with up to four PNG, JPEG or GIF images, each up to 2 MB and 4,096 pixels on a side, 4 MB in all. Larger photos are scaled down in your browser before sending. The server keeps only the newest postcard; the next one replaces it for everyone. This browser keeps up to 10,000 postcards and up to 256 MB of their images; when images go over that, the oldest images are dropped first and their text stays. The server removes metadata such as camera details and GPS coordinates from the images, keeping only the rotation. Location and details work as on the board.</dd>
+    <dt><a href="canvas">Canvas</a></dt>
+    <dd>Draw with a mouse, a finger or a stylus. Everyone sees each stroke as it is drawn. Anyone can reset the page for everyone. This browser keeps up to 10,000 finished strokes, so after a server restart the drawing comes back from the browsers that saw it, unless someone had pressed reset since.</dd>
+    <dt><a href="slots">Slots</a></dt>
+    <dd>Press the button and the shared machine spins for everyone watching. Nobody can press again until the reels stop, and then whoever presses first goes next. Nobody knows who pressed, but you are told whether your own press worked. After ten successful presses from this browser you get an auto spin button that presses for you each time the reels stop, even while the tab is in the background. Four or five of a kind, or five symbols in an unbroken sequence like <code>ABCDE</code>, is a jackpot: the machine celebrates, and every jackpot is kept forever in its own list. The newest 500 winners stay in their own list below the results. Tap any winner to see how rare it was and the probability behind it. No money or prizes are involved; it is just for fun.</dd>
+    <dt><a href="latency">Latency</a></dt>
+    <dd>Press the button and your browser times how long a list of public endpoints takes to answer, while this server times the same endpoints from its data centre. Each endpoint gets one warm-up request and then the fastest of three is kept. Everyone sees every result, with no name or address attached. Each network can start a test every five minutes, so phones and computers on the same Wi-Fi share that limit. After ten tests from this browser an auto run button appears. Below the results, a leaderboard shows the ten fastest and slowest medians from browsers and from the server. At the bottom, a browser or server median under 10 ms is a jackpot winner and 100 ms or more a jackpot loser. A median only counts when at least half of the endpoints answered.</dd>
+    <dt><a href="read">Read</a></dt>
+    <dd>Open a plain-text article picked at random from a file this site serves, and ask for another whenever you like. Each article has its own address, so you can come back to it. This browser lists the articles you opened at the bottom of the page, newest first, up to 1,000. Nobody else sees that list, and the server keeps no record of what anyone reads. If an article is ever removed from the file, its address says so instead of failing.</dd>
+</dl>
+
+<h3>Winners</h3>
+<p>Each spin is five symbols, each one of the letters A to Z or the digits 0 to 9. A spin is a winner if:</p>
+<ul>
+    <li><strong>Three, four or five of a kind:</strong> the same symbol appears at least three times, anywhere. <code>7Q7A7</code> wins.</li>
+    <li><strong>Sequence up or down:</strong> five neighbours in a row along 0 to 9 and then A to Z, with no gaps. <code>ABCDE</code>, <code>789AB</code>, <code>43210</code> and <code>VWXYZ</code> win. It does not wrap around, so <code>YZ012</code> does not.</li>
+    <li><strong>Straight up or down:</strong> all five symbols climb or all five fall, with no repeats but with gaps, in the same order. <code>13AKZ</code> and <code>ZKA80</code> win; <code>ZK8A0</code> does not.</li>
+</ul>
+<p>Winners have a gold border and a star badge in the results, and their winning symbols are highlighted. About one spin in fifty wins: 1,201,320 of the 60,466,176 possible results. Straights are the most common win, 753,920 results. Five of a kind is 1 in 1,679,616. A sequence in either direction is 1 in 944,784: only 32 runs go up and 32 come down.</p>
+<p>Four of a kind, five of a kind and sequences are <strong>jackpots</strong>: 6,400 results, about 1 in 9,448. Jackpots get a red border and a crown badge, and they are never removed: not by the server, not by your browser's 10,000 limit.</p>
+
+<h3>How the toys work</h3>
+<ul>
+    <li>Pages are rendered on the server and arrive as plain HTML. Only the board, the postcard, the canvas, the slot machine and the latency test open a live connection, over a WebSocket.</li>
+    <li>The clock at the bottom of every page shows the server's time, not your device's. The page measures how far its own clock is from the server's and keeps ticking from there.</li>
+    <li>Every message and every spin gets a UUIDv7 from the server clock, so its ID also records when it happened. Anything that claims to come from the future is rejected.</li>
+    <li>The server can restart at any time and then remembers nothing. When you open the board or the slots, your browser offers its 50 newest entries back; the postcard page offers its newest postcard, images included, when the server has none, and the server keeps the ones that fit among its newest 50. The slots page also offers its 500 newest winners back for the winners list and up to 500 jackpots for the jackpot list.</li>
+    <li>The canvas sends strokes in small batches of points measured from 0 to 1 across a square page, so phones and desktops draw the same picture. Each reset starts a new round, and strokes still in flight from the old one are dropped. Every finished stroke and every reset gets a UUIDv7, so after a restart the server takes back only strokes drawn after the newest reset anyone remembers.</li>
+    <li>The latency test from your browser uses plain requests whose answers it cannot read, only time. It cannot see anything those sites send back, and they see a request with no cookies and no referrer.</li>
+    <li>The slot result is drawn on the server with a cryptographic random number generator the moment a press is accepted. The server then refuses every press until the spin time has passed, so only one spin runs at a time. Your browser plays the reels for the time the server says is left, then adds the result to the list; your own button stays off until your reels stop, so a spin always settles on your screen before you can press again.</li>
+    <li>The reels are plain HTML animated with the Web Animations API. If your device asks for reduced motion, the symbols change without spinning.</li>
+    <li>A strict Content Security Policy only allows scripts, styles and images from this site (postcard images are shown from your browser's own copy), and connections only to this site and the latency test endpoints. There are no inline scripts.</li>
+</ul>
+
+
+<h2>Before you post</h2>
+<p class="warning">Anything you post to homes or the toys goes to every connected browser at once and is stored on their devices. Deleting an entry removes it from the server and from browsers that connect afterwards, but copies already made elsewhere cannot be recalled. Don't share anything private.</p>
+
+<h2>Your data</h2>
+<p>Pages with forms set a cookie that protects those forms from cross-site requests, and signing in sets one that keeps you signed in. There is no tracking. Your theme choice is kept in this browser's local storage. Rate limits count by network address in the server's memory only; addresses are never saved or shown.</p>
+<h3 id="location">Location and details</h3>
+<p>This is optional and off unless you turn it on. The board and the postcard work the same either way, and share one setting. If you tick <em>Attach my location and browser details</em> and your browser grants location permission, every message or postcard you send carries what your browser reports at that moment: latitude, longitude and accuracy, plus altitude, heading and speed when known, your time zone, UTC offset and local time, language, user agent, platform, screen and window size, CPU threads, memory, touch points, color scheme, motion and contrast settings, and connection type. Anyone can open it under the message with <em>Details</em>, and it is kept and offered back like the message itself. Nothing is looked up from it: no maps, no address, no third-party service. The server does not add your network address. Your browser reports these values and the server cannot check them. Untick the box, or block location for this site, to stop. Messages already sent keep their details.</p>
+<p class="clear">
+    <button type="button" data-clear-history="clear-status">Clear local toy history</button>
+    <button type="button" data-clear-local="clear-local-status" class="secondary">Delete this browser's copy of the homes</button>
+    <output id="clear-status"></output>
+    <output id="clear-local-status"></output>
+</p>
+
+<h2>Source code</h2>
+<p>The code is published under the GNU Affero General Public License, version 3 or later. If you run a modified copy for other people, you have to offer them its source too. The footer links to it.</p>
