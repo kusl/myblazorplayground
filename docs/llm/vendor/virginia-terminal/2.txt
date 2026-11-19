@@ -1,0 +1,371 @@
+kushal@fedora:~/src/dotnet/myblazorplayground$ ssh virginia
+Linux virginia 6.12.117+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.117-1 (2026-11-12) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Thu Nov 19 06:32:34 2026 from 100.105.139.82
+kushal@virginia:~$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.009s
+user	0m0.009s
+sys	0m0.000s
+remote: Enumerating objects: 301, done.
+remote: Counting objects: 100% (301/301), done.
+remote: Compressing objects: 100% (100/100), done.
+remote: Total 210 (delta 116), reused 202 (delta 108), pack-reused 0 (from 0)
+Receiving objects: 100% (210/210), 2.63 MiB | 8.54 MiB/s, done.
+Resolving deltas: 100% (116/116), completed with 75 local objects.
+From https://github.com/kusl/myblazorplayground
+   94cf436..c006312  main       -> origin/main
+
+real	0m1.011s
+user	0m0.465s
+sys	0m0.122s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (local out of date)
+
+real	0m0.268s
+user	0m0.106s
+sys	0m0.029s
+On branch main
+Your branch is behind 'origin/main' by 11 commits, and can be fast-forwarded.
+  (use "git pull" to update your local branch)
+
+nothing to commit, working tree clean
+Updating 94cf436..c006312
+Fast-forward
+ Containerfile                                                                        |     4 +-
+ README.md                                                                            |     7 +-
+ docs/adr/0005-accounts.md                                                            |     1 +
+ docs/adr/0006-roles-and-deletion.md                                                  |     2 +-
+ docs/adr/0008-toys-stay-in-memory.md                                                 |     6 +-
+ docs/adr/0010-hosting.md                                                             |     1 +
+ docs/adr/0011-security.md                                                            |     1 +
+ docs/adr/0014-two-step-sign-in.md                                                    |    12 +
+ docs/adr/0015-toys-in-postgresql.md                                                  |    11 +
+ docs/adr/README.md                                                                   |     4 +-
+ docs/adr/toys/0020-latency.md                                                        |     6 +-
+ docs/llm/dump.txt                                                                    |  4320 +++++++--
+ docs/llm/vendor/claude/archives/myblazorplayground-update2.tar.gz                    |   Bin 0 -> 85421 bytes
+ docs/llm/vendor/claude/prompts/2.md                                                  |    51 +
+ docs/llm/vendor/claude/prompts/3.md                                                  |   500 +
+ docs/llm/vendor/terminal/3.txt                                                       |   766 ++
+ docs/llm/vendor/terminal/4.txt                                                       |   757 ++
+ docs/llm/vendor/terminal/5.txt                                                       |   802 ++
+ docs/llm/vendor/virginia-terminal/1.txt                                              |   193 +
+ src/MyBlazorPlayground.Data/Migrations/0003_two_factor.sql                           |    15 +
+ src/MyBlazorPlayground.Data/Migrations/0004_toys.sql                                 |    58 +
+ src/MyBlazorPlayground.Data/People/PersonStore.cs                                    |    14 +-
+ src/MyBlazorPlayground.Data/People/TwoFactorStore.cs                                 |   175 +
+ src/MyBlazorPlayground.Data/Toys/BoardStore.cs                                       |    39 +
+ src/MyBlazorPlayground.Data/Toys/CanvasStore.cs                                      |    45 +
+ src/MyBlazorPlayground.Data/Toys/LatencyStore.cs                                     |    62 +
+ src/MyBlazorPlayground.Data/Toys/PostcardStore.cs                                    |    66 +
+ src/MyBlazorPlayground.Data/Toys/SlotStore.cs                                        |    48 +
+ src/MyBlazorPlayground.Data/Toys/ToyRecords.cs                                       |    34 +
+ src/MyBlazorPlayground.Domain/Graphics/QrCode.cs                                     |   483 +
+ src/MyBlazorPlayground.Domain/Security/Base32.cs                                     |    73 +
+ src/MyBlazorPlayground.Domain/Security/RecoveryCodes.cs                              |    49 +
+ src/MyBlazorPlayground.Domain/Security/Totp.cs                                       |    75 +
+ src/MyBlazorPlayground.Web/Chaos/ChaosOptions.cs                                     |     3 -
+ src/MyBlazorPlayground.Web/Chaos/ChaosRegistration.cs                                |    37 +-
+ src/MyBlazorPlayground.Web/Chaos/Drawing/CanvasEvent.cs                              |    12 +
+ src/MyBlazorPlayground.Web/Chaos/Drawing/CanvasService.cs                            |    69 +-
+ src/MyBlazorPlayground.Web/Chaos/Latency/LatencyService.cs                           |    38 +-
+ src/MyBlazorPlayground.Web/Chaos/Latency/LatencyStart.cs                             |    18 +-
+ src/MyBlazorPlayground.Web/Chaos/Messages/BoardService.cs                            |    27 +-
+ src/MyBlazorPlayground.Web/Chaos/Postcards/PostcardService.cs                        |    46 +-
+ src/MyBlazorPlayground.Web/Chaos/Postcards/StoredPostcard.cs                         |     9 +
+ src/MyBlazorPlayground.Web/Chaos/Slots/SlotService.cs                                |    21 +-
+ src/MyBlazorPlayground.Web/Chaos/Storage/BoardPersistence.cs                         |    24 +
+ src/MyBlazorPlayground.Web/Chaos/Storage/CanvasPersistence.cs                        |    24 +
+ src/MyBlazorPlayground.Web/Chaos/Storage/LatencyPersistence.cs                       |    25 +
+ src/MyBlazorPlayground.Web/Chaos/Storage/PostcardPersistence.cs                      |    27 +
+ src/MyBlazorPlayground.Web/Chaos/Storage/SlotPersistence.cs                          |    25 +
+ src/MyBlazorPlayground.Web/Chaos/Storage/ToyStorage.cs                               |    80 +
+ src/MyBlazorPlayground.Web/Components/App.razor.js                                   |     4 +-
+ src/MyBlazorPlayground.Web/Components/Islands/LatencyIsland.razor                    |     7 +-
+ src/MyBlazorPlayground.Web/Components/Islands/LatencyIsland.razor.js                 |    47 +-
+ src/MyBlazorPlayground.Web/Components/Layout/MainLayout.razor.css                    |    36 +-
+ src/MyBlazorPlayground.Web/Components/Layout/ThemeToggle.razor.css                   |     2 +
+ src/MyBlazorPlayground.Web/Components/Pages/About.razor                              |    17 +-
+ src/MyBlazorPlayground.Web/Components/Pages/Account/Profile.razor                    |   158 +-
+ src/MyBlazorPlayground.Web/Components/Pages/Account/SignIn.razor                     |    10 +
+ src/MyBlazorPlayground.Web/Components/Pages/Account/SignInCode.razor                 |    93 +
+ src/MyBlazorPlayground.Web/Components/Pages/Admin/AdminHome.razor                    |    30 +-
+ src/MyBlazorPlayground.Web/Components/Pages/Admin/AuditPage.razor                    |    10 +-
+ src/MyBlazorPlayground.Web/Components/Pages/Admin/PageEditors.razor                  |    10 +-
+ src/MyBlazorPlayground.Web/Components/Pages/Admin/TrashPage.razor                    |    10 +-
+ src/MyBlazorPlayground.Web/Components/Pages/BoardPage.razor                          |     2 +-
+ src/MyBlazorPlayground.Web/Components/Pages/CanvasPage.razor                         |     2 +-
+ src/MyBlazorPlayground.Web/Components/Pages/LatencyPage.razor                        |    11 +-
+ src/MyBlazorPlayground.Web/Components/Pages/PostcardPage.razor                       |     2 +-
+ src/MyBlazorPlayground.Web/Components/Pages/Work/ProjectSettings.razor               |     8 +-
+ src/MyBlazorPlayground.Web/Identity/AccountService.cs                                |    48 +-
+ src/MyBlazorPlayground.Web/Identity/IdentityRegistration.cs                          |    14 +
+ src/MyBlazorPlayground.Web/Identity/PlaygroundClaims.cs                              |    13 +
+ src/MyBlazorPlayground.Web/Identity/TwoFactorService.cs                              |   197 +
+ src/MyBlazorPlayground.Web/Infrastructure/IJournal.cs                                |    15 +
+ src/MyBlazorPlayground.Web/Infrastructure/IStateLoader.cs                            |     6 +
+ src/MyBlazorPlayground.Web/Infrastructure/KeyedCooldowns.cs                          |    63 -
+ src/MyBlazorPlayground.Web/Infrastructure/SecurityHeaders.cs                         |    23 +-
+ src/MyBlazorPlayground.Web/Infrastructure/WriteBehindJournal.cs                      |    82 +
+ src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj                             |     1 +
+ src/MyBlazorPlayground.Web/Nest/INestJournal.cs                                      |    15 -
+ src/MyBlazorPlayground.Web/Nest/NestJournal.cs                                       |    71 +-
+ src/MyBlazorPlayground.Web/Nest/NestLoader.cs                                        |     2 +-
+ src/MyBlazorPlayground.Web/Nest/NestRegistration.cs                                  |     6 +-
+ src/MyBlazorPlayground.Web/Nest/NestService.cs                                       |     6 +-
+ src/MyBlazorPlayground.Web/Persistence/PersistenceRegistration.cs                    |     7 +
+ src/MyBlazorPlayground.Web/Persistence/StartupTasks.cs                               |     9 +-
+ src/MyBlazorPlayground.Web/wwwroot/app.css                                           |   112 +-
+ src/MyBlazorPlayground.Web/wwwroot/nytimes.txt                                       | 62171 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/MyBlazorPlayground.Data.Tests/ToyStoreTests.cs                                 |   102 +
+ tests/MyBlazorPlayground.Data.Tests/TwoFactorStoreTests.cs                           |    72 +
+ tests/MyBlazorPlayground.Domain.Tests/TwoFactorTests.cs                              |   170 +
+ tests/MyBlazorPlayground.Web.Tests/Chaos/{ClockAndCooldownTests.cs => ClockTests.cs} |    22 +-
+ tests/MyBlazorPlayground.Web.Tests/Chaos/InfrastructureTests.cs                      |    12 +
+ tests/MyBlazorPlayground.Web.Tests/Chaos/LatencyServiceTests.cs                      |    39 +-
+ tests/MyBlazorPlayground.Web.Tests/Chaos/ToyPersistenceTests.cs                      |   187 +
+ tests/MyBlazorPlayground.Web.Tests/Nest/NestPersistenceTests.cs                      |     2 +-
+ tests/js/chaos/latency.test.js                                                       |     8 +-
+ 95 files changed, 72121 insertions(+), 978 deletions(-)
+ create mode 100644 docs/adr/0014-two-step-sign-in.md
+ create mode 100644 docs/adr/0015-toys-in-postgresql.md
+ create mode 100644 docs/llm/vendor/claude/archives/myblazorplayground-update2.tar.gz
+ create mode 100644 docs/llm/vendor/claude/prompts/2.md
+ create mode 100644 docs/llm/vendor/claude/prompts/3.md
+ create mode 100644 docs/llm/vendor/terminal/3.txt
+ create mode 100644 docs/llm/vendor/terminal/4.txt
+ create mode 100644 docs/llm/vendor/terminal/5.txt
+ create mode 100644 docs/llm/vendor/virginia-terminal/1.txt
+ create mode 100644 src/MyBlazorPlayground.Data/Migrations/0003_two_factor.sql
+ create mode 100644 src/MyBlazorPlayground.Data/Migrations/0004_toys.sql
+ create mode 100644 src/MyBlazorPlayground.Data/People/TwoFactorStore.cs
+ create mode 100644 src/MyBlazorPlayground.Data/Toys/BoardStore.cs
+ create mode 100644 src/MyBlazorPlayground.Data/Toys/CanvasStore.cs
+ create mode 100644 src/MyBlazorPlayground.Data/Toys/LatencyStore.cs
+ create mode 100644 src/MyBlazorPlayground.Data/Toys/PostcardStore.cs
+ create mode 100644 src/MyBlazorPlayground.Data/Toys/SlotStore.cs
+ create mode 100644 src/MyBlazorPlayground.Data/Toys/ToyRecords.cs
+ create mode 100644 src/MyBlazorPlayground.Domain/Graphics/QrCode.cs
+ create mode 100644 src/MyBlazorPlayground.Domain/Security/Base32.cs
+ create mode 100644 src/MyBlazorPlayground.Domain/Security/RecoveryCodes.cs
+ create mode 100644 src/MyBlazorPlayground.Domain/Security/Totp.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Drawing/CanvasEvent.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Postcards/StoredPostcard.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Storage/BoardPersistence.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Storage/CanvasPersistence.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Storage/LatencyPersistence.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Storage/PostcardPersistence.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Storage/SlotPersistence.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Chaos/Storage/ToyStorage.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Components/Pages/Account/SignInCode.razor
+ create mode 100644 src/MyBlazorPlayground.Web/Identity/TwoFactorService.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Infrastructure/IJournal.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Infrastructure/IStateLoader.cs
+ delete mode 100644 src/MyBlazorPlayground.Web/Infrastructure/KeyedCooldowns.cs
+ create mode 100644 src/MyBlazorPlayground.Web/Infrastructure/WriteBehindJournal.cs
+ delete mode 100644 src/MyBlazorPlayground.Web/Nest/INestJournal.cs
+ create mode 100644 src/MyBlazorPlayground.Web/wwwroot/nytimes.txt
+ create mode 100644 tests/MyBlazorPlayground.Data.Tests/ToyStoreTests.cs
+ create mode 100644 tests/MyBlazorPlayground.Data.Tests/TwoFactorStoreTests.cs
+ create mode 100644 tests/MyBlazorPlayground.Domain.Tests/TwoFactorTests.cs
+ rename tests/MyBlazorPlayground.Web.Tests/Chaos/{ClockAndCooldownTests.cs => ClockTests.cs} (69%)
+ create mode 100644 tests/MyBlazorPlayground.Web.Tests/Chaos/ToyPersistenceTests.cs
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+CONTAINER ID  IMAGE                                    COMMAND     CREATED            STATUS                      PORTS                     NAMES
+b5ebfcaeae17  docker.io/library/postgres:18-alpine     postgres    About an hour ago  Up About an hour (healthy)  127.0.0.1:5433->5432/tcp  myblazorplayground_postgres_1
+677533cae3e0  localhost/myblazorplayground-web:latest              About an hour ago  Up About an hour            127.0.0.1:8090->8080/tcp  myblazorplayground_web_1
+CONTAINER ID  IMAGE                                    COMMAND               CREATED            STATUS            PORTS       NAMES
+c88f567fb429  docker.io/cloudflare/cloudflared:latest  tunnel --no-autou...  About an hour ago  Up About an hour              myblazorplayground-tunnel
+[instance] site: ready at http://127.0.0.1:8090
+[instance] tunnel: https://functions-reductions-gibraltar-civic.trycloudflare.com
+
+real	0m0.725s
+user	0m0.452s
+sys	0m0.210s
+kushal@virginia:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh down
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.178s
+user	0m0.162s
+sys	0m0.017s
+
+real	0m0.305s
+user	0m0.116s
+sys	0m0.025s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (up to date)
+
+real	0m0.264s
+user	0m0.096s
+sys	0m0.026s
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+myblazorplayground_postgres_1
+myblazorplayground_web_1
+myblazorplayground_web_1
+myblazorplayground_postgres_1
+761bdc583b0237bd140bafd8b6a8c4c76c2b3d0251eb40b3b918111b4d2fcaf8
+myblazorplayground_default
+
+real	0m1.866s
+user	0m0.887s
+sys	0m0.406s
+kushal@virginia:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh up
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.009s
+user	0m0.004s
+sys	0m0.005s
+
+real	0m0.299s
+user	0m0.109s
+sys	0m0.043s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (up to date)
+
+real	0m0.278s
+user	0m0.114s
+sys	0m0.022s
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+[instance] building the web image
+[1/2] STEP 1/10: FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
+[1/2] STEP 2/10: WORKDIR /source
+--> Using cache 932277c5ef40b149a5a6956439b532366e7f2df8a71bf9e631b21dad0f6bb0e0
+--> 932277c5ef40
+[1/2] STEP 3/10: ARG SOURCE_REVISION=
+--> Using cache 672d125cf0eccad8f366cf54eac274999719cb960efd8dd495e1585037ca27ca
+--> 672d125cf0ec
+[1/2] STEP 4/10: COPY .editorconfig Directory.Build.props Directory.Packages.props global.json ./
+--> Using cache 3f76fb67f15df1186744bf3c775f1cf436b845d4aac5251efe3005643d080c79
+--> 3f76fb67f15d
+[1/2] STEP 5/10: COPY src/MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj src/MyBlazorPlayground.Domain/
+--> Using cache de1928a353795222c35e0046d3a577c08bdd58db18462abe40765b3ef722ee6a
+--> de1928a35379
+[1/2] STEP 6/10: COPY src/MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj src/MyBlazorPlayground.Data/
+--> Using cache eacbfc9ff8b5a1de5580b684b7fb2d84f27dda29ca56700e5ec8bfa8ee999c08
+--> eacbfc9ff8b5
+[1/2] STEP 7/10: COPY src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj src/MyBlazorPlayground.Web/
+--> 57b4c3f04a11
+[1/2] STEP 8/10: RUN dotnet restore src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj
+  Determining projects to restore...
+  Restored /source/src/MyBlazorPlayground.Domain/MyBlazorPlayground.Domain.csproj (in 567 ms).
+  Restored /source/src/MyBlazorPlayground.Data/MyBlazorPlayground.Data.csproj (in 3.74 sec).
+  Restored /source/src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj (in 3.74 sec).
+--> 1e676fc3bc46
+[1/2] STEP 9/10: COPY src/ src/
+--> 0cf71358caa1
+[1/2] STEP 10/10: RUN dotnet publish src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj         --configuration Release         --no-restore         --output /app         -p:UseAppHost=false         -p:SourceRevisionId="${SOURCE_REVISION}"     && find /app/wwwroot/_framework -name 'blazor.web*.js' | grep -q .     || { echo 'blazor.web.js is missing from the published site' >&2; exit 1; }
+  MyBlazorPlayground.Domain -> /source/src/MyBlazorPlayground.Domain/bin/Release/net11.0/MyBlazorPlayground.Domain.dll
+  MyBlazorPlayground.Data -> /source/src/MyBlazorPlayground.Data/bin/Release/net11.0/MyBlazorPlayground.Data.dll
+  MyBlazorPlayground.Web -> /source/src/MyBlazorPlayground.Web/bin/Release/net11.0/MyBlazorPlayground.Web.dll
+  MyBlazorPlayground.Web -> /app/
+--> 196121db0173
+[2/2] STEP 1/9: FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
+[2/2] STEP 2/9: WORKDIR /app
+--> Using cache b4b712609c916fc51320c3627601ec890ccc07e3aa9b6bb407bc4d756a3a471d
+--> b4b712609c91
+[2/2] STEP 3/9: RUN apt-get update     && apt-get install -y --no-install-recommends tzdata curl     && rm -rf /var/lib/apt/lists/*
+--> Using cache 652fc63f99222ad3f2d5066b21c81e4668758ed0bec1168b83dc08151cef9351
+--> 652fc63f9922
+[2/2] STEP 4/9: COPY --from=build /app .
+--> 8f938a823872
+[2/2] STEP 5/9: ENV ASPNETCORE_URLS=http://+:8080     ASPNETCORE_ENVIRONMENT=Production     DOTNET_EnableDiagnostics=0
+--> 13f558f92e85
+[2/2] STEP 6/9: EXPOSE 8080
+--> 899895ca9b96
+[2/2] STEP 7/9: USER $APP_UID
+--> 64f41fcb9e7c
+[2/2] STEP 8/9: HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=8 CMD curl -fsS http://127.0.0.1:8080/health/ready || exit 1
+WARN[0091] HEALTHCHECK is not supported for OCI image format and will be ignored. Must use `docker` format 
+--> 06ccb5ffc4d1
+[2/2] STEP 9/9: ENTRYPOINT ["dotnet", "MyBlazorPlayground.Web.dll"]
+[2/2] COMMIT localhost/myblazorplayground-web:latest
+WARN[0092] HEALTHCHECK is not supported for OCI image format and will be ignored. Must use `docker` format 
+--> 4417a3b2b82a
+Successfully tagged localhost/myblazorplayground-web:latest
+4417a3b2b82a2288f862744d3982763001fa661be7dafef82d48bd1044cb967f
+[instance] starting postgres and web
+13fd91842572bad323b22628519bbe42e7bf478ea027baf01fef4423d50f61cb
+f820c3dc92f88f7ce26ba013c43a35a4b5a8f535c43ec1491b124c6500e42cb8
+myblazorplayground_postgres_1
+4f1bbe41d9d589887e33d4060bc75853547a39e1c4dd095c58a09d8cb6afb1ef
+myblazorplayground_web_1
+[instance] waiting for http://127.0.0.1:8090/health/ready
+[instance] opening a quick tunnel to http://127.0.0.1:8090
+
+  my blazor playground is up.
+
+  Public URL:  https://pmid-comparable-valley-archived.trycloudflare.com
+  Local URL:   http://127.0.0.1:8090
+
+
+  The quick tunnel URL changes when the tunnel restarts. 'scripts/instance.sh url' prints the current one.
+
+https://pmid-comparable-valley-archived.trycloudflare.com
+
+real	1m48.562s
+user	0m22.520s
+sys	0m7.370s
+kushal@virginia:~/src/dotnet/myblazorplayground$ exit
+logout
+Connection to virginia closed.
+kushal@fedora:~/src/dotnet/myblazorplayground$ 
