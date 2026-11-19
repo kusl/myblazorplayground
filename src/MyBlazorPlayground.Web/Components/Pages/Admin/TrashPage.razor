@@ -21,7 +21,7 @@
 else
 {
     <div class="table-scroll">
-        <table>
+        <table class="stack">
             <thead>
                 <tr><th>What</th><th>Where</th><th>Deleted</th><th>Actions</th></tr>
             </thead>
@@ -29,10 +29,10 @@ else
                 @foreach (var record in _records)
                 {
                     <tr>
-                        <td><span class="badge">@SubjectNames.Label(record.Subject)</span> @record.Title</td>
-                        <td>@(record.ProjectKey ?? (record.Subject == Subject.NestEntry ? "Homes" : ""))</td>
-                        <td>@Clock.Format(record.DeletedAt)<br /><span class="muted">@(record.DeletedByName ?? "someone")</span></td>
-                        <td>
+                        <td data-label="What"><span class="badge">@SubjectNames.Label(record.Subject)</span> @record.Title</td>
+                        <td data-label="Where">@(record.ProjectKey ?? (record.Subject == Subject.NestEntry ? "Homes" : ""))</td>
+                        <td data-label="Deleted">@Clock.Format(record.DeletedAt)<br /><span class="muted">@(record.DeletedByName ?? "someone")</span></td>
+                        <td class="cell-actions">
                             <div class="actions">
                                 <form method="post" @formname="@($"restore-{record.Id:N}")" @onsubmit="() => RestoreAsync(record)" data-enhance class="inline-form">
                                     <AntiforgeryToken />

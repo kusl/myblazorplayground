@@ -19,7 +19,7 @@ public sealed class LatencyServiceTests
         var viewer = new LatencyRecorder();
         latency.Subscribe(viewer);
 
-        var start = latency.Begin("a");
+        var start = latency.Begin();
         Assert.Equal(StartResult.Accepted, start.Result);
         Assert.True(Uuid7.IsValid(start.Id));
         Assert.True(latency.Running);
@@ -47,41 +47,34 @@ public sealed class LatencyServiceTests
     public async Task OnlyOneRunAtATime()
     {
         using var latency = Create(new FakeProbe(endpoints => new int?[endpoints.Count]), o => o.LatencyGapSeconds = 0);
-        var first = latency.Begin("a");
-        Assert.Equal(StartResult.Busy, latency.Begin("b").Result);
+        var first = latency.Begin();
+        Assert.Equal(StartResult.Busy, latency.Begin().Result);
         latency.Finish(first.Id, [.. Enumerable.Repeat(-1, Count)]);
         await latency.WhenIdle().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-        Assert.Equal(StartResult.Accepted, latency.Begin("b").Result);
+        Assert.Equal(StartResult.Accepted, latency.Begin().Result);
     }
 
     [Fact]
-    public async Task RunsAreSpacedOutAndEachClientWaitsItsTurn()
+    public async Task RunsAreSpacedOutButNobodyWaitsLonger()
     {
         using var latency = Create(new FakeProbe(endpoints => new int?[endpoints.Count]));
-        var first = latency.Begin("a");
+        var first = latency.Begin();
         latency.Finish(first.Id, [.. Enumerable.Repeat(-1, Count)]);
         await latency.WhenIdle().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 
-        Assert.Equal(StartResult.Busy, latency.Begin("b").Result);
-        _time.Advance(TimeSpan.FromSeconds(10));
-        var again = latency.Begin("a");
-        Assert.Equal(StartResult.Wait, again.Result);
-        Assert.Equal("wait 290", again.Reply);
-        var other = latency.Begin("b");
-        Assert.Equal(StartResult.Accepted, other.Result);
-        Assert.StartsWith($"ok {other.Id:D} 300", other.Reply, StringComparison.Ordinal);
-        latency.Finish(other.Id, [.. Enumerable.Repeat(-1, Count)]);
-        await latency.WhenIdle().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-
-        _time.Advance(TimeSpan.FromSeconds(290));
-        Assert.Equal(StartResult.Accepted, latency.Begin("a").Result);
+        Assert.Equal(StartResult.Busy, latency.Begin().Result);
+        Assert.Equal("busy", latency.Begin().Reply);
+        _time.Advance(latency.Gap);
+        var again = latency.Begin();
+        Assert.Equal(StartResult.Accepted, again.Result);
+        Assert.Equal($"ok {again.Id:D}", again.Reply);
     }
 
     [Fact]
     public void FinishChecksTheRunAndTheValues()
     {
         using var latency = Create(new FakeProbe(endpoints => new int?[endpoints.Count]));
-        var start = latency.Begin("a");
+        var start = latency.Begin();
         Assert.False(latency.Finish(Guid.CreateVersion7(Start), [.. Enumerable.Repeat(1, Count)]));
         Assert.False(latency.Finish(start.Id, [1, 2]));
         Assert.False(latency.Finish(start.Id, [.. Enumerable.Repeat(-2, Count)]));
@@ -95,7 +88,7 @@ public sealed class LatencyServiceTests
     {
         var probe = new FakeProbe(endpoints => [.. endpoints.Select(_ => (int?)1)]);
         using var latency = Create(probe, o => o.LatencyServerProbe = false);
-        var start = latency.Begin("a");
+        var start = latency.Begin();
         latency.Finish(start.Id, [.. Enumerable.Repeat(5, Count)]);
         await latency.WhenIdle().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.Equal(0, probe.Calls);
@@ -118,7 +111,7 @@ public sealed class LatencyServiceTests
     public void SnapshotsSayWhetherARunIsGoing()
     {
         using var latency = Create(new FakeProbe(endpoints => new int?[endpoints.Count]));
-        latency.Begin("a");
+        latency.Begin();
         var late = new LatencyRecorder();
         latency.Subscribe(late);
         Assert.True(Assert.Single(late.Updates).Running);
@@ -132,7 +125,7 @@ public sealed class LatencyServiceTests
         latency.Subscribe(viewer);
         Assert.Empty(viewer.Updates[0].Boards!.Runs);
 
-        var start = latency.Begin("a");
+        var start = latency.Begin();
         latency.Finish(start.Id, [.. Enumerable.Repeat(8, Count)]);
         await latency.WhenIdle().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
 

@@ -5,9 +5,9 @@
 <PageTitle>Chaos latency</PageTitle>
 
 <h1>Latency</h1>
-<p class="lede">One button times how long @LatencyCatalog.Endpoints.Count public endpoints take to answer, once from your browser and once from this server. Everyone sees every result. Each network can run a test every @Minutes minutes, so devices on the same Wi-Fi share that limit.</p>
+<p class="lede">One button times how long @LatencyCatalog.Endpoints.Count public endpoints take to answer, once from your browser and once from this server. Everyone sees every result. One test runs at a time, with @((int)Latency.Gap.TotalSeconds) seconds between tests. Every result is kept.</p>
 
-<LatencyIsland Client="@_client" @rendermode="InteractiveServer" />
+<LatencyIsland @rendermode="InteractiveServer" />
 
 <section class="feed" data-permanent="latency-feed" aria-labelledby="runs-title">
     <h2 id="runs-title">Results</h2>
@@ -45,19 +45,12 @@
     private IReadOnlyList<BoardMessage> _runs = [];
     private LatencyLeaders _leaders = LatencyLeaders.Empty;
     private DateTimeOffset _now;
-    private string _client = ClientAddress.Unknown;
-
-    private int Minutes => Math.Max(1, (int)Math.Round(Latency.Cooldown.TotalMinutes));
-
-    [CascadingParameter]
-    private HttpContext? HttpContext { get; set; }
 
     protected override void OnInitialized()
     {
         _runs = Latency.Messages;
         _leaders = Latency.Leaders;
         _now = Time.GetUtcNow();
-        _client = ClientAddress.Key(HttpContext?.Connection.RemoteIpAddress);
     }
 
     private static string SideLabel(LatencySide side) => side == LatencySide.Browser ? "Browser" : "Server";

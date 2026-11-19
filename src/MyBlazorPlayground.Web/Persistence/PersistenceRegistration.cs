@@ -7,6 +7,7 @@ using MyBlazorPlayground.Data.Pages;
 using MyBlazorPlayground.Data.People;
 using MyBlazorPlayground.Data.Protection;
 using MyBlazorPlayground.Data.Settings;
+using MyBlazorPlayground.Data.Toys;
 using MyBlazorPlayground.Data.Trash;
 using MyBlazorPlayground.Data.Work;
 using Npgsql;
@@ -30,6 +31,7 @@ internal static class PersistenceRegistration
         services.AddSingleton<Database>();
         services.AddSingleton<MigrationRunner>();
         services.AddSingleton<PersonStore>();
+        services.AddSingleton<TwoFactorStore>();
         services.AddSingleton<SiteSettings>();
         services.AddSingleton<AuditLog>();
         services.AddSingleton<DataProtectionKeyStore>();
@@ -40,6 +42,11 @@ internal static class PersistenceRegistration
         services.AddSingleton<CommentStore>();
         services.AddSingleton<AttachmentStore>();
         services.AddSingleton<NestEntryStore>();
+        services.AddSingleton<BoardStore>();
+        services.AddSingleton<SlotStore>();
+        services.AddSingleton<LatencyStore>();
+        services.AddSingleton<CanvasStore>();
+        services.AddSingleton<PostcardStore>();
         services.AddSingleton<Deletions>();
         services.AddSingleton<StartupTasks>();
         services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);

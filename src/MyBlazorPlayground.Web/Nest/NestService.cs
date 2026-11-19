@@ -12,20 +12,20 @@ internal sealed class NestService
     private readonly KeyedTokenBuckets _posts;
     private readonly Lock _gate = new();
     private readonly HashSet<INestSubscriber> _subscribers = [];
-    private readonly INestJournal _journal;
+    private readonly IJournal<Entry> _journal;
     private HashSet<Guid> _deleted = [];
     private Entry[] _entries = [];
     private Dictionary<Guid, Entry> _byId = new();
     private ListingCache? _listings;
     private long _version;
 
-    public NestService(TimeProvider time, IOptions<NestOptions> options, INestJournal? journal = null)
+    public NestService(TimeProvider time, IOptions<NestOptions> options, IJournal<Entry>? journal = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         var limits = options.Value;
         _time = time;
-        _journal = journal ?? INestJournal.None;
+        _journal = journal ?? NoJournal<Entry>.Instance;
         Capacity = limits.Capacity;
         _posts = new KeyedTokenBuckets(limits.PostBurst, limits.PostsPerSecond, time);
         StartedAt = time.GetUtcNow();

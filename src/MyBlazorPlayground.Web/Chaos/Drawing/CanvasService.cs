@@ -22,18 +22,20 @@ internal sealed class CanvasService
     private readonly LinkedList<Stroke> _strokes = new();
     private readonly HashSet<Guid> _ids = [];
     private readonly HashSet<ICanvasSubscriber> _subscribers = [];
+    private readonly IJournal<CanvasEvent> _journal;
     private int _epoch = 1;
     private int _points;
     private long? _lastReset;
     private Guid _resetId;
     private Guid _lastId;
 
-    public CanvasService(TimeProvider time, IOptions<ChaosOptions> options)
+    public CanvasService(TimeProvider time, IOptions<ChaosOptions> options, IJournal<CanvasEvent>? journal = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         var limits = options.Value;
         _time = time;
+        _journal = journal ?? NoJournal<CanvasEvent>.Instance;
         _maxPoints = limits.CanvasMaxPoints;
         _pointBurst = limits.StrokePointBurst;
         _pointsPerSecond = limits.StrokePointsPerSecond;
@@ -150,7 +152,7 @@ internal sealed class CanvasService
             _points += count;
             if (end)
             {
-                stroke.Done = true;
+                Complete(stroke);
                 session.Open = null;
             }
 
@@ -180,6 +182,7 @@ internal sealed class CanvasService
             _strokes.Clear();
             _ids.Clear();
             _points = 0;
+            _journal.Append([CanvasEvent.Reset(_resetId)]);
             Broadcast(CanvasUpdate.ForReset(_epoch, _resetId), null);
             return ResetResult.Accepted;
         }
@@ -200,6 +203,7 @@ internal sealed class CanvasService
             }
 
             _resetId = reset;
+            _journal.Append([CanvasEvent.Reset(reset)]);
             if (reset.CompareTo(_lastId) > 0)
             {
                 _lastId = reset;
@@ -215,9 +219,9 @@ internal sealed class CanvasService
                     _ids.Remove(node.Value.Id);
                     _strokes.Remove(node);
                 }
-                else
+                else if (!node.Value.Done)
                 {
-                    node.Value.Done = true;
+                    Complete(node.Value);
                 }
 
                 node = next;
@@ -255,8 +259,9 @@ internal sealed class CanvasService
                     continue;
                 }
 
-                var stroke = new Stroke(offer.Id, _epoch, 0) { Done = true };
+                var stroke = new Stroke(offer.Id, _epoch, 0);
                 stroke.Append(offer.Points);
+                Complete(stroke);
                 Insert(stroke);
                 _points += count;
                 if (offer.Id.CompareTo(_lastId) > 0)
@@ -273,6 +278,43 @@ internal sealed class CanvasService
             }
 
             return added.Count;
+        }
+    }
+
+    public int Load(Guid? reset, IEnumerable<StrokeOffer> strokes)
+    {
+        ArgumentNullException.ThrowIfNull(strokes);
+        lock (_gate)
+        {
+            if (reset is { } id && Uuid7.IsValid(id) && id.CompareTo(_resetId) > 0)
+            {
+                _resetId = id;
+                _lastId = id.CompareTo(_lastId) > 0 ? id : _lastId;
+            }
+
+            var loaded = 0;
+            foreach (var offer in strokes.Where(IsStored).DistinctBy(offer => offer.Id).OrderByDescending(offer => offer.Id))
+            {
+                var count = offer.Points.Count / 2;
+                if (offer.Id.CompareTo(_resetId) <= 0 || _ids.Contains(offer.Id))
+                {
+                    continue;
+                }
+
+                if (_points + count > _maxPoints)
+                {
+                    break;
+                }
+
+                var stroke = new Stroke(offer.Id, _epoch, 0) { Done = true };
+                stroke.Append(offer.Points);
+                Insert(stroke);
+                _points += count;
+                _lastId = offer.Id.CompareTo(_lastId) > 0 ? offer.Id : _lastId;
+                loaded++;
+            }
+
+            return loaded;
         }
     }
 
@@ -326,12 +368,21 @@ internal sealed class CanvasService
         return true;
     }
 
-    private bool IsRestorable(StrokeOffer offer, DateTimeOffset now) =>
-        offer.Points is { Count: > 0 } points
+    private static bool IsStored(StrokeOffer offer) =>
+        offer?.Points is { Count: > 0 } points
         && points.Count % 2 == 0
         && points.Count <= MaxStrokePoints * 2
         && InRange(points)
-        && MessageWindow.IsRestorable(offer.Id, now, StartedAt);
+        && Uuid7.IsValid(offer.Id);
+
+    private bool IsRestorable(StrokeOffer offer, DateTimeOffset now) =>
+        IsStored(offer) && MessageWindow.IsRestorable(offer.Id, now, StartedAt);
+
+    private void Complete(Stroke stroke)
+    {
+        stroke.Done = true;
+        _journal.Append([CanvasEvent.Of(stroke)]);
+    }
 
     private CanvasUpdate Snapshot() =>
         CanvasUpdate.ForSnapshot(
@@ -371,7 +422,7 @@ internal sealed class CanvasService
     {
         if (session.Open is { } open && open.Epoch == _epoch && !open.Done)
         {
-            open.Done = true;
+            Complete(open);
             Broadcast(CanvasUpdate.ForStroke(_epoch, open.Id, open.Count, [], true), session.Subscriber);
         }
 

@@ -12,10 +12,10 @@ internal sealed partial class LatencyService : IDisposable
     private readonly TimeProvider _time;
     private readonly ILatencyProbe _probe;
     private readonly ILogger<LatencyService> _logger;
-    private readonly KeyedCooldowns _cooldowns;
     private readonly CancellationTokenSource _stopping = new();
     private readonly Lock _gate = new();
     private readonly HashSet<ILatencySubscriber> _subscribers = [];
+    private readonly IJournal<BoardMessage> _journal;
     private readonly bool _serverProbe;
     private readonly TimeSpan _gap;
     private BoardMessage[] _messages = [];
@@ -25,7 +25,7 @@ internal sealed partial class LatencyService : IDisposable
     private long? _lastStart;
     private Task _idle = Task.CompletedTask;
 
-    public LatencyService(TimeProvider time, IOptions<ChaosOptions> options, ILatencyProbe probe, ILogger<LatencyService> logger)
+    public LatencyService(TimeProvider time, IOptions<ChaosOptions> options, ILatencyProbe probe, ILogger<LatencyService> logger, IJournal<BoardMessage>? journal = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
@@ -35,15 +35,14 @@ internal sealed partial class LatencyService : IDisposable
         _time = time;
         _probe = probe;
         _logger = logger;
+        _journal = journal ?? NoJournal<BoardMessage>.Instance;
         Capacity = limits.LatencyCapacity;
         RankCapacity = limits.LatencyRankCapacity;
         JackpotCapacity = limits.LatencyJackpotCapacity;
-        Cooldown = TimeSpan.FromSeconds(limits.LatencyCooldownSeconds);
         Budget = TimeSpan.FromSeconds(limits.LatencyBudgetSeconds);
         BrowserWait = Budget + TimeSpan.FromSeconds(15);
         _gap = TimeSpan.FromSeconds(limits.LatencyGapSeconds);
         _serverProbe = limits.LatencyServerProbe;
-        _cooldowns = new KeyedCooldowns(Cooldown, time);
         StartedAt = time.GetUtcNow();
     }
 
@@ -53,7 +52,7 @@ internal sealed partial class LatencyService : IDisposable
 
     public int JackpotCapacity { get; }
 
-    public TimeSpan Cooldown { get; }
+    public TimeSpan Gap => _gap;
 
     public TimeSpan Budget { get; }
 
@@ -84,7 +83,7 @@ internal sealed partial class LatencyService : IDisposable
         }
     }
 
-    public LatencyStart Begin(string client)
+    public LatencyStart Begin()
     {
         lock (_gate)
         {
@@ -94,17 +93,12 @@ internal sealed partial class LatencyService : IDisposable
                 return LatencyStart.Busy;
             }
 
-            if (!_cooldowns.TryStart(client, out var remaining))
-            {
-                return LatencyStart.Wait(Seconds(remaining));
-            }
-
             _lastStart = now;
             var pending = new Pending(Uuid7.After(LatestId(), _time.GetUtcNow()));
             _pending = pending;
             Broadcast(LatencyUpdate.State(_version, true));
             _idle = RunAsync(pending);
-            return LatencyStart.Started(pending.Id, Seconds(Cooldown));
+            return LatencyStart.Started(pending.Id);
         }
     }
 
@@ -132,6 +126,20 @@ internal sealed partial class LatencyService : IDisposable
     public int Offer(IEnumerable<BoardMessage> offered) => Restore(offered, MaxOffers, recent: true);
 
     public int OfferLeaders(IEnumerable<BoardMessage> offered) => Restore(offered, MaxLeaderOffers, recent: false);
+
+    public int Load(IEnumerable<BoardMessage> recent, IEnumerable<BoardMessage> leaders)
+    {
+        ArgumentNullException.ThrowIfNull(recent);
+        ArgumentNullException.ThrowIfNull(leaders);
+        static bool Stored(BoardMessage message) => message is not null && Uuid7.IsValid(message.Id) && LatencyRun.IsValid(message.Text);
+        var latest = recent.Where(Stored).ToList();
+        lock (_gate)
+        {
+            _messages = MessageWindow.Merge(_messages, latest, Capacity)?.Next ?? _messages;
+            _leaders = _leaders.Merge(latest.Concat(leaders.Where(Stored)), RankCapacity, JackpotCapacity) ?? _leaders;
+            return _messages.Select(message => message.Id).Concat(_leaders.Boards(null).Runs.Select(run => run.Id)).Distinct().Count();
+        }
+    }
 
     public void Subscribe(ILatencySubscriber subscriber)
     {
@@ -166,8 +174,6 @@ internal sealed partial class LatencyService : IDisposable
         _stopping.Cancel();
         _stopping.Dispose();
     }
-
-    private static int Seconds(TimeSpan span) => Math.Max(1, (int)Math.Ceiling(span.TotalSeconds));
 
     private int Restore(IEnumerable<BoardMessage> offered, int limit, bool recent)
     {
@@ -255,7 +261,9 @@ internal sealed partial class LatencyService : IDisposable
         }
 
         Broadcast(LatencyUpdate.Delta(_version, previous, change?.Added ?? [], change?.Removed ?? [], _pending is not null, boards));
-        return (change?.Added ?? []).Select(message => message.Id).Concat(entered).Distinct().Count();
+        var stored = (change?.Added ?? []).Select(message => message.Id).Concat(entered).ToHashSet();
+        _journal.Append([.. candidates.Where(message => stored.Contains(message.Id)).DistinctBy(message => message.Id)]);
+        return stored.Count;
     }
 
     private void Broadcast(LatencyUpdate update)

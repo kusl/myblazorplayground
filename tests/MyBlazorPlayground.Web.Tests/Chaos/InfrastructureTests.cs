@@ -169,3 +169,15 @@ public sealed class ChaosOptionsTests
         Assert.False(new ChaosOptions { SpinMilliseconds = 60_000 }.IsValid());
     }
 }
+
+public sealed class SecurityHeaderTests
+{
+    [Theory]
+    [InlineData("text/html; charset=utf-8", null, "no-cache, no-transform")]
+    [InlineData("text/html", "no-cache, no-store", "no-cache, no-store, no-transform")]
+    [InlineData("text/html", "no-transform", null)]
+    [InlineData("application/json", null, null)]
+    [InlineData(null, null, null)]
+    public void HtmlAsksProxiesNotToRewriteIt(string? contentType, string? cacheControl, string? expected) =>
+        Assert.Equal(expected, SecurityHeaders.WithNoTransform(contentType, cacheControl));
+}

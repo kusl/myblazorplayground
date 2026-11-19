@@ -7,3 +7,4 @@ Status: accepted
 - `/_blazor` only accepts WebSockets from this origin (or `Site__AllowedOrigins`), with per-client and total connection limits. Requests are rate limited per client address after `X-Forwarded-For`.
 - Return URLs after sign-in are accepted only when they are local paths.
 - Rendered user content goes through `RichText` or Razor encoding only.
+- HTML responses add `no-transform` to `Cache-Control` so proxies leave the markup alone. Cloudflare may still inject an inline bot-detection script on quick tunnels; the CSP blocks it on purpose and the console warning about it is harmless.

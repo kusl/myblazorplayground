@@ -6,7 +6,7 @@ export const STORE = 'runs';
 export const LOCAL_CAP = 10000;
 export const PING_MS = 25000;
 export const RUNS_KEY = 'chaos-latency-runs';
-export const NEXT_KEY = 'chaos-latency-next';
+export const LEGACY_NEXT_KEY = 'chaos-latency-next';
 export const AUTO_UNLOCK = 10;
 export const SAMPLES = 3;
 export const PARALLEL = 6;
@@ -162,13 +162,8 @@ export function parseStartReply(reply) {
         return { kind: 'busy' };
     }
     const parts = typeof reply === 'string' ? reply.split(' ') : [];
-    if (parts[0] === 'wait' && parts.length === 2) {
-        const seconds = Number.parseInt(parts[1], 10);
-        return Number.isInteger(seconds) && seconds > 0 ? { kind: 'wait', seconds } : { kind: 'error' };
-    }
-    if (parts[0] === 'ok' && parts.length === 3 && /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(parts[1])) {
-        const seconds = Number.parseInt(parts[2], 10);
-        return { kind: 'ok', id: parts[1], seconds: Number.isInteger(seconds) && seconds > 0 ? seconds : 300 };
+    if (parts[0] === 'ok' && parts.length === 2 && /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(parts[1])) {
+        return { kind: 'ok', id: parts[1] };
     }
     return { kind: 'error' };
 }
@@ -314,10 +309,13 @@ class LatencyClient {
             list: doc.getElementById(board.id),
             empty: doc.getElementById(`${board.id}-empty`),
         }));
-        this.cooldown = (Number.parseInt(panel.dataset.cooldown, 10) || 300) * 1000;
+        this.gap = (Number.parseInt(panel.dataset.gap, 10) || 10) * 1000;
         this.budget = (Number.parseInt(panel.dataset.budget, 10) || 30) * 1000;
         this.runs = readNumber(win.localStorage, RUNS_KEY);
-        this.next = readNumber(win.localStorage, NEXT_KEY);
+        try {
+            win.localStorage.removeItem(LEGACY_NEXT_KEY);
+        } catch {
+        }
         this.retryAt = 0;
         this.version = -1;
         this.live = new Map();
@@ -592,18 +590,11 @@ class LatencyClient {
     }
 
     canPress(now = Date.now()) {
-        return this.ready && !this.testing && !this.running && !this.disposed && now >= this.next;
+        return this.ready && !this.testing && !this.running && !this.disposed && now >= this.retryAt;
     }
 
     async press(manual) {
-        const now = Date.now();
         if (!this.ready || this.testing || this.disposed) {
-            return;
-        }
-        if (now < this.next) {
-            if (manual) {
-                this.status.show(`You can run the next test in ${clockText(this.next - now)}.`);
-            }
             return;
         }
         if (this.running) {
@@ -625,13 +616,10 @@ class LatencyClient {
         if (reply.kind === 'ok') {
             await this.test(reply);
         } else if (reply.kind === 'busy') {
-            this.retryAt = Date.now() + 10000 + Math.round(Math.random() * 20000);
+            this.retryAt = Date.now() + this.gap + Math.round(Math.random() * this.gap);
             if (manual) {
-                this.status.show('Someone else is testing right now. Try again in a few seconds.');
+                this.status.show('A test just ran or is running. Try again in a few seconds.');
             }
-        } else if (reply.kind === 'wait') {
-            this.setNext(Date.now() + reply.seconds * 1000);
-            this.status.show(`A test ran from your network recently. Devices sharing an internet connection share this limit. The next one is possible in ${clockText(reply.seconds * 1000)}.`);
         } else {
             this.status.show('Could not reach the server.');
         }
@@ -644,7 +632,6 @@ class LatencyClient {
         this.waiting = reply.id;
         this.runs += 1;
         writeNumber(this.win.localStorage, RUNS_KEY, this.runs);
-        this.setNext(Date.now() + reply.seconds * 1000);
         this.clearTable();
         let done = 0;
         this.status.show(`Testing from your browser: 0 of ${this.endpoints.length}.`, reply.id);
@@ -671,17 +658,12 @@ class LatencyClient {
         }
     }
 
-    setNext(at) {
-        this.next = at;
-        writeNumber(this.win.localStorage, NEXT_KEY, at);
-    }
-
     toggleAuto() {
         if (this.runs < AUTO_UNLOCK) {
             return;
         }
         this.auto = !this.auto;
-        this.status.show(this.auto ? 'Auto run is on. It runs a test whenever one is allowed.' : 'Auto run is off.');
+        this.status.show(this.auto ? 'Auto run is on. It runs a test whenever the machine is free.' : 'Auto run is off.');
         this.updateControls();
     }
 
@@ -698,10 +680,9 @@ class LatencyClient {
     }
 
     updateControls() {
-        const now = Date.now();
         if (this.runButton) {
-            this.runButton.disabled = !this.ready || this.testing || this.running || now < this.next;
-            this.runButton.textContent = this.testing ? 'Testing…' : now < this.next ? `Next test in ${clockText(this.next - now)}` : 'Run test';
+            this.runButton.disabled = !this.ready || this.testing || this.running;
+            this.runButton.textContent = this.testing ? 'Testing…' : 'Run test';
         }
         if (this.autoButton) {
             this.autoButton.hidden = this.runs < AUTO_UNLOCK;

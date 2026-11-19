@@ -6,7 +6,7 @@ using MyBlazorPlayground.Domain.Security;
 
 namespace MyBlazorPlayground.Web.Identity;
 
-internal sealed record AccountResult(string? Problem, PersonRecord? Person = null)
+internal sealed record AccountResult(string? Problem, PersonRecord? Person = null, bool NeedsSecondFactor = false)
 {
     public bool Succeeded => Problem is null && Person is not null;
 }
@@ -17,9 +17,11 @@ internal sealed class AccountService(
     AuditLog audit,
     PasswordHasher hasher,
     SignInThrottle throttle,
-    SetupGate setup)
+    SetupGate setup,
+    TwoFactorService twoFactor)
 {
     private const string Invalid = "That user name and password don't match an account.";
+    private const string Expired = "That sign in took too long. Start again.";
 
     public Task<bool> IsRegistrationOpenAsync(CancellationToken cancellationToken = default) =>
         settings.GetFlagAsync(SiteSettings.RegistrationOpen, true, cancellationToken);
@@ -107,7 +109,49 @@ internal sealed class AccountService(
         }
 
         var rehash = check == PasswordCheck.SucceededNeedsRehash ? hasher.Hash(password!) : null;
+        if (person.HasTwoFactor)
+        {
+            if (rehash is not null)
+            {
+                await people.UpdatePasswordHashAsync(person.Id, rehash, cancellationToken);
+            }
+
+            return new AccountResult(null, person, NeedsSecondFactor: true);
+        }
+
         await people.RecordSignInAsync(person.Id, rehash, cancellationToken);
+        return new AccountResult(null, person);
+    }
+
+    public async Task<AccountResult> CompleteSecondFactorAsync(Guid personId, string? stamp, string? code, string client, CancellationToken cancellationToken = default)
+    {
+        if (!throttle.TryTake(client, "second-factor") || !throttle.TryTake(personId.ToString(), "second-factor-person"))
+        {
+            return new AccountResult("Too many attempts. Wait a minute and try again.");
+        }
+
+        var person = await people.FindAsync(personId, cancellationToken);
+        if (person is null
+            || person.DisabledAt is not null
+            || !person.HasTwoFactor
+            || !string.Equals(person.SecurityStamp.ToString("D", System.Globalization.CultureInfo.InvariantCulture), stamp, StringComparison.Ordinal))
+        {
+            return new AccountResult(Expired);
+        }
+
+        var outcome = await twoFactor.VerifyAsync(person.Id, code, cancellationToken);
+        if (outcome == SecondFactor.Failed)
+        {
+            await audit.WriteAsync(new AuditEntry(person.Id, person.UserName, "sign-in-failed", "person", person.Id.ToString(), "Wrong two-step code", client), cancellationToken);
+            return new AccountResult("That code is not right. Try the newest code from your app, or a recovery code.");
+        }
+
+        if (outcome == SecondFactor.RecoveryCode)
+        {
+            await audit.WriteAsync(new AuditEntry(person.Id, person.UserName, "recovery-code-used", "person", person.Id.ToString(), "Signed in with a recovery code", client), cancellationToken);
+        }
+
+        await people.RecordSignInAsync(person.Id, null, cancellationToken);
         return new AccountResult(null, person);
     }
 

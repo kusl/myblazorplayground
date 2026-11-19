@@ -3,7 +3,7 @@ using MyBlazorPlayground.Data.Nest;
 
 namespace MyBlazorPlayground.Web.Nest;
 
-internal sealed partial class NestLoader(NestEntryStore store, NestService service, IOptions<NestOptions> options, ILogger<NestLoader> logger)
+internal sealed partial class NestLoader(NestEntryStore store, NestService service, IOptions<NestOptions> options, ILogger<NestLoader> logger) : IStateLoader
 {
     public async Task LoadAsync(CancellationToken cancellationToken)
     {

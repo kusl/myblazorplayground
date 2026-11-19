@@ -70,6 +70,16 @@ else
             return;
         }
 
+        if (result.NeedsSecondFactor)
+        {
+            await HttpContext.SignInAsync(
+                IdentityRegistration.TwoFactorScheme,
+                PlaygroundClaims.Pending(result.Person!, Form.Remember),
+                new AuthenticationProperties { IsPersistent = false });
+            Navigation.NavigateTo($"account/sign-in/code?returnUrl={Uri.EscapeDataString(Target)}", forceLoad: true);
+            return;
+        }
+
         await HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
             PlaygroundClaims.Create(result.Person!),

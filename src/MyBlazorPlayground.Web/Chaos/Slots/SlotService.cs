@@ -15,6 +15,7 @@ internal sealed class SlotService
     private readonly string _alphabet;
     private readonly Lock _gate = new();
     private readonly HashSet<ISlotSubscriber> _subscribers = [];
+    private readonly IJournal<BoardMessage> _journal;
     private BoardMessage[] _messages = [];
     private BoardMessage[] _winners = [];
     private BoardMessage[] _jackpots = [];
@@ -22,12 +23,13 @@ internal sealed class SlotService
     private Guid _spinId;
     private long? _spinStarted;
 
-    public SlotService(TimeProvider time, IOptions<ChaosOptions> options)
+    public SlotService(TimeProvider time, IOptions<ChaosOptions> options, IJournal<BoardMessage>? journal = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         var limits = options.Value;
         _time = time;
+        _journal = journal ?? NoJournal<BoardMessage>.Instance;
         Capacity = limits.SlotCapacity;
         WinnerCapacity = limits.SlotWinnerCapacity;
         JackpotCapacity = limits.SlotJackpotCapacity;
@@ -92,6 +94,21 @@ internal sealed class SlotService
     public int OfferWinners(IEnumerable<BoardMessage> offered) => Restore(offered, MaxWinnerOffers, Lists.Winners | Lists.Jackpots);
 
     public int OfferJackpots(IEnumerable<BoardMessage> offered) => Restore(offered, MaxJackpotOffers, Lists.Jackpots);
+
+    public int Load(IEnumerable<BoardMessage> recent, IEnumerable<BoardMessage> winners, IEnumerable<BoardMessage> jackpots)
+    {
+        ArgumentNullException.ThrowIfNull(recent);
+        ArgumentNullException.ThrowIfNull(winners);
+        ArgumentNullException.ThrowIfNull(jackpots);
+        static bool Stored(BoardMessage message) => message is not null && Uuid7.IsValid(message.Id) && SlotRules.IsValid(message.Text);
+        lock (_gate)
+        {
+            _messages = MessageWindow.Merge(_messages, recent.Where(Stored), Capacity)?.Next ?? _messages;
+            _winners = MessageWindow.Merge(_winners, winners.Where(Stored).Where(IsWinner), WinnerCapacity)?.Next ?? _winners;
+            _jackpots = MessageWindow.Merge(_jackpots, jackpots.Where(Stored).Where(IsJackpot), int.MaxValue)?.Next ?? _jackpots;
+            return _messages.Concat(_winners).Concat(_jackpots).Select(message => message.Id).Distinct().Count();
+        }
+    }
 
     public void Subscribe(ISlotSubscriber subscriber)
     {
@@ -200,6 +217,8 @@ internal sealed class SlotService
         {
             Volatile.Write(ref _jackpots, enshrined.Next);
         }
+
+        _journal.Append([.. (change?.Added ?? []).Concat(crowned?.Added ?? []).Concat(enshrined?.Added ?? []).DistinctBy(message => message.Id)]);
 
         Broadcast(SlotUpdate.Delta(
             _version,

@@ -18,7 +18,7 @@
 else
 {
     <div class="table-scroll">
-        <table>
+        <table class="stack">
             <thead>
                 <tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr>
             </thead>
@@ -26,10 +26,10 @@ else
                 @foreach (var entry in _events)
                 {
                     <tr>
-                        <td><time datetime="@Clock.Iso(entry.OccurredAt)">@Clock.Format(entry.OccurredAt)</time></td>
-                        <td>@(entry.ActorName ?? "system")</td>
-                        <td><code>@entry.Action</code> <span class="muted">@entry.SubjectType</span></td>
-                        <td>@entry.Summary</td>
+                        <td data-label="When"><time datetime="@Clock.Iso(entry.OccurredAt)">@Clock.Format(entry.OccurredAt)</time></td>
+                        <td data-label="Who">@(entry.ActorName ?? "system")</td>
+                        <td data-label="What"><code>@entry.Action</code> <span class="muted">@entry.SubjectType</span></td>
+                        <td data-label="Details">@entry.Summary</td>
                     </tr>
                 }
             </tbody>

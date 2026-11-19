@@ -4,7 +4,7 @@
 @inject ILogger<LatencyIsland> Logger
 
 <section @ref="_panel" class="probe" aria-labelledby="probe-title"
-         data-cooldown="@((int)Latency.Cooldown.TotalSeconds)" data-budget="@((int)Latency.Budget.TotalSeconds)">
+         data-gap="@((int)Latency.Gap.TotalSeconds)" data-budget="@((int)Latency.Budget.TotalSeconds)">
     <h2 id="probe-title" class="visually-hidden">Latency test</h2>
     <div class="controls">
         <button type="button" class="run" disabled>Run test</button>
@@ -47,9 +47,6 @@
     private int _offered;
     private int _offeredLeaders;
 
-    [Parameter, EditorRequired]
-    public string Client { get; set; } = ClientAddress.Unknown;
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
@@ -80,7 +77,7 @@
     }
 
     [JSInvokable]
-    public string Begin() => Latency.Begin(Client).Reply;
+    public string Begin() => Latency.Begin().Reply;
 
     [JSInvokable]
     public bool Finish(string id, int[] browser) =>

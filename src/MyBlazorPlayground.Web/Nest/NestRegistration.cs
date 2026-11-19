@@ -11,13 +11,13 @@ internal static class NestRegistration
             .Validate(nest => nest.IsValid(), "Nest limits are out of range.")
             .ValidateOnStart();
         services.AddSingleton<NestJournal>();
-        services.AddSingleton<INestJournal>(provider => provider.GetRequiredService<NestJournal>());
+        services.AddSingleton<IJournal<Entry>>(provider => provider.GetRequiredService<NestJournal>());
         services.AddHostedService(provider => provider.GetRequiredService<NestJournal>());
         services.AddSingleton(provider => new NestService(
             provider.GetRequiredService<TimeProvider>(),
             provider.GetRequiredService<IOptions<NestOptions>>(),
-            provider.GetRequiredService<INestJournal>()));
-        services.AddSingleton<NestLoader>();
+            provider.GetRequiredService<IJournal<Entry>>()));
+        services.AddSingleton<IStateLoader, NestLoader>();
         services.AddScoped<NestModeration>();
         return services;
     }

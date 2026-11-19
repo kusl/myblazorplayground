@@ -104,7 +104,7 @@ public sealed class NestPersistenceTests
     private static Entry Stored(DateTimeOffset at, string text) =>
         new(Uuid7.After(Guid.Empty, at), EntryKinds.Comment, ["zillow:29747113"], null, null, text);
 
-    private sealed class RecordingJournal : INestJournal
+    private sealed class RecordingJournal : IJournal<Entry>
     {
         public List<Entry> Entries { get; } = [];
 

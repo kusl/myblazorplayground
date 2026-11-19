@@ -22,6 +22,8 @@ public sealed class PersonRecord
     public DateTime? DisabledAt { get; init; }
 
     public bool IsAdministrator { get; init; }
+
+    public bool HasTwoFactor { get; init; }
 }
 
 public sealed record NewPerson(string UserName, string DisplayName, string PasswordHash);
@@ -39,7 +41,8 @@ public sealed class PersonStore(Database database)
         """
         SELECT p.id, p.user_name, p.display_name, p.password_hash, p.security_stamp, p.created_at,
                p.last_sign_in_at, p.disabled_at,
-               EXISTS (SELECT 1 FROM site_role r WHERE r.person_id = p.id AND r.role = 'administrator') AS is_administrator
+               EXISTS (SELECT 1 FROM site_role r WHERE r.person_id = p.id AND r.role = 'administrator') AS is_administrator,
+               EXISTS (SELECT 1 FROM person_totp t WHERE t.person_id = p.id AND t.enabled_at IS NOT NULL) AS has_two_factor
         FROM person p
         """;
 
@@ -132,6 +135,15 @@ public sealed class PersonStore(Database database)
         await connection.ExecuteAsync(new CommandDefinition(
             "UPDATE person SET last_sign_in_at = now(), password_hash = coalesce(@rehashedPassword, password_hash) WHERE id = @id",
             new { id, rehashedPassword },
+            cancellationToken: cancellationToken));
+    }
+
+    public async Task UpdatePasswordHashAsync(Guid id, string passwordHash, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await database.OpenAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE person SET password_hash = @passwordHash WHERE id = @id",
+            new { id, passwordHash },
             cancellationToken: cancellationToken));
     }
 

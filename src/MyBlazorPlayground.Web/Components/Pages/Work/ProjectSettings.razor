@@ -47,15 +47,15 @@ else
 
     <h2>Members</h2>
     <div class="table-scroll">
-        <table>
+        <table class="stack">
             <thead><tr><th>Person</th><th>Role</th><th></th></tr></thead>
             <tbody>
                 @foreach (var member in _members)
                 {
                     var personId = member.PersonId;
                     <tr>
-                        <td><strong>@member.DisplayName</strong> <span class="muted">@member.UserName</span></td>
-                        <td>
+                        <td data-label="Person"><strong>@member.DisplayName</strong> <span class="muted">@member.UserName</span></td>
+                        <td data-label="Role">
                             @if (_access.CanManage)
                             {
                                 <form method="post" @formname="@($"role-{personId:N}")" @onsubmit="() => SetRoleAsync(member.UserName)" data-enhance class="actions">
@@ -75,7 +75,7 @@ else
                                 @PageRoles.Label(member.Role)
                             }
                         </td>
-                        <td>
+                        <td class="cell-actions">
                             @if (_access.CanManage || personId == _access.Actor.PersonId)
                             {
                                 <form method="post" @formname="@($"remove-{personId:N}")" @onsubmit="() => RemoveAsync(member)" data-enhance class="inline-form">

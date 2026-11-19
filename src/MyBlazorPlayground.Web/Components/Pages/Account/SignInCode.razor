@@ -1,0 +1,93 @@
+@page "/account/sign-in/code"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@inject AccountService Accounts
+@inject NavigationManager Navigation
+
+<PageTitle>Two-step sign in</PageTitle>
+
+<h1>Two-step sign in</h1>
+
+@if (_personId is null)
+{
+    <Notice Text="That sign in took too long or was already used." Error="true" />
+    <p><a href="account/sign-in?returnUrl=@Uri.EscapeDataString(Target)">Sign in again</a>.</p>
+}
+else
+{
+    <p class="lede">Enter the 6-digit code from your authenticator app. If you lost your phone, enter one of your recovery codes instead.</p>
+    <Notice Text="@_problem" Error="true" />
+    <EditForm Model="Form" FormName="sign-in-code" OnSubmit="SubmitAsync" Enhance class="form">
+        <div class="field">
+            <label for="code">Code</label>
+            <InputText id="code" @bind-Value="Form.Code" autocomplete="one-time-code" inputmode="text" autocapitalize="off" spellcheck="false" maxlength="20" required class="code-input" />
+        </div>
+        <input type="hidden" name="Form.ReturnUrl" value="@ReturnUrl" />
+        <div class="actions">
+            <button type="submit">Sign in</button>
+            <a href="account/sign-in?returnUrl=@Uri.EscapeDataString(Target)">Start over</a>
+        </div>
+        <p class="hint">Codes change every 30 seconds. Each recovery code works once.</p>
+    </EditForm>
+}
+
+@code {
+    private Guid? _personId;
+    private string? _stamp;
+    private bool _remember;
+    private string? _problem;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "sign-in-code")]
+    private CodeModel Form { get; set; } = default!;
+
+    private string Target => LocalUrl.Or(Form?.ReturnUrl ?? ReturnUrl, "/work");
+
+    protected override async Task OnInitializedAsync()
+    {
+        Form ??= new CodeModel();
+        var pending = await HttpContext.AuthenticateAsync(IdentityRegistration.TwoFactorScheme);
+        if (pending.Succeeded && pending.Principal.PersonId() is { } id)
+        {
+            _personId = id;
+            _stamp = pending.Principal.FindFirstValue(PlaygroundClaims.StampClaim);
+            _remember = pending.Principal.FindFirstValue(PlaygroundClaims.RememberClaim) == "true";
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_personId is not { } id)
+        {
+            return;
+        }
+
+        var result = await Accounts.CompleteSecondFactorAsync(id, _stamp, Form.Code, ClientAddress.Key(HttpContext.Connection.RemoteIpAddress), HttpContext.RequestAborted);
+        Form.Code = null;
+        if (!result.Succeeded)
+        {
+            _problem = result.Problem;
+            return;
+        }
+
+        await HttpContext.SignOutAsync(IdentityRegistration.TwoFactorScheme);
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            PlaygroundClaims.Create(result.Person!),
+            new AuthenticationProperties { IsPersistent = _remember });
+        Navigation.NavigateTo(Target, forceLoad: true);
+    }
+
+    public sealed class CodeModel
+    {
+        public string? Code { get; set; }
+
+        public string? ReturnUrl { get; set; }
+    }
+}

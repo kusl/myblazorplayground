@@ -96,11 +96,11 @@ describe('leaderboards', () => {
 
 describe('start replies', () => {
     it('reads every reply', () => {
-        expect(parseStartReply('ok 0199e1aa-bbbb-7ccc-8ddd-eeeeeeeeeeee 300')).toEqual({ kind: 'ok', id: '0199e1aa-bbbb-7ccc-8ddd-eeeeeeeeeeee', seconds: 300 });
+        expect(parseStartReply('ok 0199e1aa-bbbb-7ccc-8ddd-eeeeeeeeeeee')).toEqual({ kind: 'ok', id: '0199e1aa-bbbb-7ccc-8ddd-eeeeeeeeeeee' });
         expect(parseStartReply('busy')).toEqual({ kind: 'busy' });
-        expect(parseStartReply('wait 42')).toEqual({ kind: 'wait', seconds: 42 });
-        expect(parseStartReply('wait x')).toEqual({ kind: 'error' });
-        expect(parseStartReply('ok nope 300')).toEqual({ kind: 'error' });
+        expect(parseStartReply('wait 42')).toEqual({ kind: 'error' });
+        expect(parseStartReply('ok 0199e1aa-bbbb-7ccc-8ddd-eeeeeeeeeeee 300')).toEqual({ kind: 'error' });
+        expect(parseStartReply('ok nope')).toEqual({ kind: 'error' });
         expect(parseStartReply(null)).toEqual({ kind: 'error' });
     });
 });

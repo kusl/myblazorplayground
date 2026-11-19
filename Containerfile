@@ -14,7 +14,9 @@ RUN dotnet publish src/MyBlazorPlayground.Web/MyBlazorPlayground.Web.csproj \
         --no-restore \
         --output /app \
         -p:UseAppHost=false \
-        -p:SourceRevisionId="${SOURCE_REVISION}"
+        -p:SourceRevisionId="${SOURCE_REVISION}" \
+    && find /app/wwwroot/_framework -name 'blazor.web*.js' | grep -q . \
+    || { echo 'blazor.web.js is missing from the published site' >&2; exit 1; }
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 WORKDIR /app

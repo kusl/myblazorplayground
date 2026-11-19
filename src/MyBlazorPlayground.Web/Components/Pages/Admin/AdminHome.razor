@@ -8,6 +8,7 @@
 @inject SiteSettings Settings
 @inject AuditLog Audit
 @inject LocalTime Clock
+@inject TwoFactorService TwoFactor
 
 <PageTitle>Administration</PageTitle>
 
@@ -27,7 +28,7 @@
 
 <h2>People (@_people.Count)</h2>
 <div class="table-scroll">
-    <table>
+    <table class="stack">
         <thead>
             <tr><th>User</th><th>Role</th><th>Last sign in</th><th>Actions</th></tr>
         </thead>
@@ -36,17 +37,21 @@
             {
                 var id = person.Id;
                 <tr>
-                    <td>
+                    <td data-label="User">
                         <strong>@person.DisplayName</strong><br />
                         <span class="muted">@person.UserName</span>
                         @if (person.DisabledAt is not null)
                         {
                             <span class="badge">disabled</span>
                         }
+                        @if (person.HasTwoFactor)
+                        {
+                            <span class="badge">two-step</span>
+                        }
                     </td>
-                    <td>@(person.IsAdministrator ? "Administrator" : "Member")</td>
-                    <td>@(person.LastSignInAt is { } at ? Clock.Format(at) : "never")</td>
-                    <td>
+                    <td data-label="Role">@(person.IsAdministrator ? "Administrator" : "Member")</td>
+                    <td data-label="Last sign in">@(person.LastSignInAt is { } at ? Clock.Format(at) : "never")</td>
+                    <td class="cell-actions">
                         <div class="actions">
                             <form method="post" @formname="@($"admin-{id:N}")" @onsubmit="() => ToggleAdministratorAsync(person)" data-enhance class="inline-form">
                                 <AntiforgeryToken />
@@ -56,6 +61,13 @@
                                 <AntiforgeryToken />
                                 <button type="submit" class="small @(person.DisabledAt is null ? "danger" : "secondary")">@(person.DisabledAt is null ? "Disable" : "Enable")</button>
                             </form>
+                            @if (person.HasTwoFactor)
+                            {
+                                <form method="post" @formname="@($"two-step-{id:N}")" @onsubmit="() => ResetTwoFactorAsync(person)" data-enhance class="inline-form">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="small secondary">Turn off two-step</button>
+                                </form>
+                            }
                         </div>
                     </td>
                 </tr>
@@ -121,6 +133,14 @@
             Say(disable ? "The last active administrator cannot be disabled." : "Nothing changed.", true);
         }
 
+        await LoadAsync();
+    }
+
+    private async Task ResetTwoFactorAsync(PersonRecord person)
+    {
+        Say(await TwoFactor.ResetAsync(Actor, person, HttpContext.RequestAborted)
+            ? $"Two-step sign in is off for {person.UserName}. They are signed out and can set it up again."
+            : "Nothing changed.", false);
         await LoadAsync();
     }
 

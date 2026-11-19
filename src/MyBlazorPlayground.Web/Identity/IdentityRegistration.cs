@@ -12,6 +12,8 @@ namespace MyBlazorPlayground.Web.Identity;
 internal static class IdentityRegistration
 {
     public const string AdministratorPolicy = "administrator";
+    public const string TwoFactorScheme = "two-factor";
+    public static readonly TimeSpan TwoFactorWindow = TimeSpan.FromMinutes(5);
     private const string ValidatedKey = ".playground.validated";
     private static readonly TimeSpan ValidationInterval = TimeSpan.FromSeconds(60);
 
@@ -21,6 +23,7 @@ internal static class IdentityRegistration
         services.AddSingleton<SignInThrottle>();
         services.AddSingleton<SetupGate>();
         services.AddScoped<AccountService>();
+        services.AddScoped<TwoFactorService>();
         services.AddCascadingAuthenticationState();
         services.AddAuthorizationBuilder()
             .AddPolicy(AdministratorPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(SiteRoles.Administrator));
@@ -38,6 +41,17 @@ internal static class IdentityRegistration
                 cookie.ExpireTimeSpan = TimeSpan.FromDays(14);
                 cookie.SlidingExpiration = true;
                 cookie.Events.OnValidatePrincipal = ValidateAsync;
+            })
+            .AddCookie(TwoFactorScheme, cookie =>
+            {
+                cookie.Cookie.Name = "playground.2fa";
+                cookie.Cookie.Path = "/account";
+                cookie.Cookie.HttpOnly = true;
+                cookie.Cookie.SameSite = SameSiteMode.Strict;
+                cookie.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+                cookie.ExpireTimeSpan = TwoFactorWindow;
+                cookie.SlidingExpiration = false;
+                cookie.LoginPath = "/account/sign-in";
             });
         return services;
     }

@@ -3,8 +3,12 @@
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Authentication.Cookies
 @using MyBlazorPlayground.Domain.Accounts
+@using MyBlazorPlayground.Data.People
+@using MyBlazorPlayground.Domain.Security
 @inject AccountService Accounts
-@inject NavigationManager Navigation
+@inject TwoFactorService TwoFactor
+@inject PersonStore People
+@inject LocalTime Clock
 
 <PageTitle>Your account</PageTitle>
 
@@ -36,6 +40,75 @@
     <p class="hint">Changing your password signs you out everywhere else.</p>
 </EditForm>
 
+<h2 id="two-step">Two-step sign in</h2>
+<Notice Text="@_twoFactorMessage" Error="@_twoFactorError" />
+@if (_freshCodes is { Count: > 0 })
+{
+    <section class="panel recovery" aria-labelledby="recovery-title">
+        <h3 id="recovery-title">Your recovery codes</h3>
+        <p>Save these somewhere safe now. Each one signs you in once if you lose your phone. They are not shown again.</p>
+        <ol class="recovery-codes">
+            @foreach (var recovery in _freshCodes)
+            {
+                <li><code>@recovery</code></li>
+            }
+        </ol>
+    </section>
+}
+@switch (_status.State)
+{
+    case TwoFactorState.Off:
+        <p>Optional. When it is on, signing in also asks for a 6-digit code from an authenticator app on your phone, such as Google Authenticator, Microsoft Authenticator, 1Password, Bitwarden or Aegis. Codes work on any address this site runs at.</p>
+        <form method="post" @formname="totp-begin" @onsubmit="BeginAsync" data-enhance class="actions">
+            <AntiforgeryToken />
+            <button type="submit">Set up an authenticator app</button>
+        </form>
+        break;
+    case TwoFactorState.Pending:
+        <ol class="steps">
+            <li>Open your authenticator app and add an account.</li>
+            <li>Scan this code, or type the key below.</li>
+            <li>Enter the 6-digit code the app shows.</li>
+        </ol>
+        <div class="enroll">
+            @if (_status.QrSvg is { } qr)
+            {
+                <div class="qr">@((MarkupString)qr)</div>
+            }
+            <div class="field">
+                <span class="label">Key</span>
+                <code class="secret">@_status.Key</code>
+                <p class="hint">Time based, 6 digits, every 30 seconds. <a href="@_status.Uri">Open in an app on this device</a>.</p>
+            </div>
+        </div>
+        <EditForm Model="Confirm" FormName="totp-confirm" OnSubmit="ConfirmAsync" Enhance class="form">
+            <div class="field">
+                <label for="totp-code">Code from the app</label>
+                <InputText id="totp-code" @bind-Value="Confirm.Code" autocomplete="one-time-code" inputmode="numeric" maxlength="7" required class="code-input" />
+            </div>
+            <div class="actions"><button type="submit">Turn on</button></div>
+        </EditForm>
+        <form method="post" @formname="totp-cancel" @onsubmit="CancelAsync" data-enhance class="actions spaced">
+            <AntiforgeryToken />
+            <button type="submit" class="secondary">Cancel setup</button>
+        </form>
+        break;
+    default:
+        <p>On since @(_status.Since is { } since ? Clock.Format(since) : "now"). Recovery codes left: <strong>@_status.RecoveryCodesLeft</strong> of @RecoveryCodes.Count.</p>
+        <EditForm Model="Manage" FormName="totp-manage" OnSubmit="ManageAsync" Enhance class="form">
+            <div class="field">
+                <label for="totp-password">Password</label>
+                <InputText id="totp-password" type="password" @bind-Value="Manage.Password" autocomplete="current-password" required />
+            </div>
+            <div class="actions">
+                <button type="submit" name="Manage.Action" value="renew" class="secondary">New recovery codes</button>
+                <button type="submit" name="Manage.Action" value="off" class="danger">Turn off</button>
+            </div>
+            <p class="hint">Both need your password. Turning it off signs you out everywhere else.</p>
+        </EditForm>
+        break;
+}
+
 @code {
     private string? _message;
     private bool _error;
@@ -49,10 +122,79 @@
     [SupplyParameterFromForm(FormName = "password")]
     private PasswordModel Password { get; set; } = default!;
 
-    protected override void OnInitialized()
+    [SupplyParameterFromForm(FormName = "totp-confirm")]
+    private ConfirmModel Confirm { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "totp-manage")]
+    private ManageModel Manage { get; set; } = default!;
+
+    private TwoFactorStatus _status = TwoFactorStatus.Off;
+    private IReadOnlyList<string>? _freshCodes;
+    private string? _twoFactorMessage;
+    private bool _twoFactorError;
+
+    private Actor Actor => HttpContext.User.ToActor()!;
+
+    private string Client => ClientAddress.Key(HttpContext.Connection.RemoteIpAddress);
+
+    protected override async Task OnInitializedAsync()
     {
         Name ??= new RenameModel { DisplayName = HttpContext.User.DisplayName() };
         Password ??= new PasswordModel();
+        Confirm ??= new ConfirmModel();
+        Manage ??= new ManageModel();
+        await LoadTwoFactorAsync();
+    }
+
+    private async Task LoadTwoFactorAsync() =>
+        _status = await TwoFactor.StatusAsync(Actor.PersonId, Actor.UserName, HttpContext.RequestAborted);
+
+    private async Task BeginAsync()
+    {
+        await TwoFactor.BeginAsync(Actor.PersonId, HttpContext.RequestAborted);
+        await LoadTwoFactorAsync();
+    }
+
+    private async Task CancelAsync()
+    {
+        await TwoFactor.CancelAsync(Actor.PersonId, HttpContext.RequestAborted);
+        SayTwoFactor("Setup cancelled.", false);
+        await LoadTwoFactorAsync();
+    }
+
+    private async Task ConfirmAsync()
+    {
+        var result = await TwoFactor.ConfirmAsync(Actor, Confirm.Code, Client, HttpContext.RequestAborted);
+        Confirm = new ConfirmModel();
+        await FinishTwoFactorAsync(result, "Two-step sign in is on. Other devices need to sign in again.", rotated: true);
+    }
+
+    private async Task ManageAsync()
+    {
+        var off = Manage.Action == "off";
+        var result = off
+            ? await TwoFactor.DisableAsync(Actor, Manage.Password, Client, HttpContext.RequestAborted)
+            : await TwoFactor.RenewRecoveryCodesAsync(Actor, Manage.Password, Client, HttpContext.RequestAborted);
+        Manage = new ManageModel();
+        await FinishTwoFactorAsync(result, off ? "Two-step sign in is off." : "New recovery codes are ready. The old ones no longer work.", rotated: off);
+    }
+
+    private async Task FinishTwoFactorAsync(TwoFactorResult result, string success, bool rotated)
+    {
+        SayTwoFactor(result.Problem ?? success, !result.Succeeded);
+        _freshCodes = result.RecoveryCodes;
+        if (result.Succeeded && rotated && await People.FindAsync(Actor.PersonId, HttpContext.RequestAborted) is { } person)
+        {
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, PlaygroundClaims.Create(person), new AuthenticationProperties { IsPersistent = true });
+        }
+
+        await LoadTwoFactorAsync();
+    }
+
+    private void SayTwoFactor(string message, bool error)
+    {
+        _twoFactorMessage = message;
+        _twoFactorError = error;
     }
 
     private async Task RenameAsync()
@@ -77,6 +219,18 @@
             await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, PlaygroundClaims.Create(result.Person!), new AuthenticationProperties { IsPersistent = true });
             Name.DisplayName = result.Person!.DisplayName;
         }
+    }
+
+    public sealed class ConfirmModel
+    {
+        public string? Code { get; set; }
+    }
+
+    public sealed class ManageModel
+    {
+        public string? Password { get; set; }
+
+        public string? Action { get; set; }
     }
 
     public sealed class RenameModel

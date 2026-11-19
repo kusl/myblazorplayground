@@ -294,7 +294,7 @@ export function boot(win) {
                 { DB_NAME: BOARD_DB, SHARE_KEY, deleteDatabase },
                 { DB_NAME: SLOTS_DB, PRESS_KEY },
                 { DB_NAME: CANVAS_DB },
-                { DB_NAME: LATENCY_DB, RUNS_KEY, NEXT_KEY },
+                { DB_NAME: LATENCY_DB, RUNS_KEY, LEGACY_NEXT_KEY },
                 { DB_NAME: POSTCARD_DB },
                 { DB_NAME: READING_DB },
             ] = await Promise.all([
@@ -306,7 +306,7 @@ export function boot(win) {
                 import('./Pages/ReadPage.razor.js'),
             ]);
             const outcomes = await Promise.all([BOARD_DB, POSTCARD_DB, SLOTS_DB, CANVAS_DB, LATENCY_DB, READING_DB].map(name => deleteDatabase(win.indexedDB, name)));
-            for (const key of [SHARE_KEY, PRESS_KEY, RUNS_KEY, NEXT_KEY]) {
+            for (const key of [SHARE_KEY, PRESS_KEY, RUNS_KEY, LEGACY_NEXT_KEY]) {
                 try {
                     win.localStorage.removeItem(key);
                 } catch {

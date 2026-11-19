@@ -18,4 +18,4 @@ Status: accepted
 - A project always has an editor and the site always has an active administrator; the last one cannot be demoted, removed or disabled.
 - Comments are edited by their author or an editor. Anything else in a project can be edited by any member.
 - Home pages have no owner, so their editors are granted by an administrator per home key (`home:zillow:29747113`). Any key of a merged home counts.
-- The toys keep nothing past a restart and have no delete (ADR 0008).
+- The toys store everything (ADR 0015) and have no delete.

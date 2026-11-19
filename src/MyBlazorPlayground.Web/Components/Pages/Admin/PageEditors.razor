@@ -40,16 +40,16 @@
 else
 {
     <div class="table-scroll">
-        <table>
+        <table class="stack">
             <thead><tr><th>Page</th><th>Editor</th><th>Since</th><th></th></tr></thead>
             <tbody>
                 @foreach (var editor in _editors)
                 {
                     <tr>
-                        <td><code>@editor.PageKey</code></td>
-                        <td>@editor.DisplayName <span class="muted">@editor.UserName</span></td>
-                        <td>@Clock.Format(editor.GrantedAt)</td>
-                        <td>
+                        <td data-label="Page"><code>@editor.PageKey</code></td>
+                        <td data-label="Editor">@editor.DisplayName <span class="muted">@editor.UserName</span></td>
+                        <td data-label="Since">@Clock.Format(editor.GrantedAt)</td>
+                        <td class="cell-actions">
                             <form method="post" @formname="@($"revoke-{editor.PersonId:N}-{editor.PageKey}")" @onsubmit="() => RevokeAsync(editor)" data-enhance class="inline-form">
                                 <AntiforgeryToken />
                                 <button type="submit" class="small secondary">Revoke</button>

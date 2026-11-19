@@ -25,13 +25,16 @@
 
 .account {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: center;
-    gap: .5rem .75rem;
+    gap: .35rem .75rem;
+    min-inline-size: 0;
     font-size: .9rem;
 }
 
 .account .who {
-    max-inline-size: 10rem;
+    max-inline-size: min(10rem, 30vw);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -43,23 +46,19 @@
 
 nav {
     grid-column: 1 / -1;
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr));
     gap: .25rem;
     margin-inline: -.25rem;
-    padding-block-end: .15rem;
-    overflow-x: auto;
-    scroll-snap-type: x proximity;
-    scrollbar-width: thin;
 }
 
 nav ::deep a {
-    flex: 0 0 auto;
-    padding: .45rem .7rem;
+    padding: .4rem .5rem;
     border-radius: var(--radius);
     color: var(--fg);
+    text-align: center;
     text-decoration: none;
     white-space: nowrap;
-    scroll-snap-align: start;
 }
 
 nav ::deep a:hover {
@@ -70,6 +69,23 @@ nav ::deep a.active {
     color: var(--on-ink);
     background: var(--ink);
     font-weight: 650;
+}
+
+@media (width < 40rem) {
+    .site-header {
+        position: static;
+    }
+}
+
+@media (width >= 40rem) {
+    nav {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    nav ::deep a {
+        padding: .45rem .7rem;
+    }
 }
 
 @media (width >= 60rem) {

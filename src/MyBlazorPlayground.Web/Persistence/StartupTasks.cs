@@ -1,15 +1,18 @@
 using MyBlazorPlayground.Data;
 using MyBlazorPlayground.Web.Identity;
-using MyBlazorPlayground.Web.Nest;
 
 namespace MyBlazorPlayground.Web.Persistence;
 
-internal sealed class StartupTasks(MigrationRunner migrations, NestLoader nest, SetupGate setup)
+internal sealed class StartupTasks(MigrationRunner migrations, IEnumerable<IStateLoader> loaders, SetupGate setup)
 {
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         await migrations.RunAsync(60, TimeSpan.FromSeconds(2), cancellationToken);
-        await nest.LoadAsync(cancellationToken);
+        foreach (var loader in loaders)
+        {
+            await loader.LoadAsync(cancellationToken);
+        }
+
         await setup.InitializeAsync(cancellationToken);
     }
 }

@@ -11,15 +11,17 @@ internal sealed class PostcardService : IDisposable
     private readonly SemaphoreSlim _uploads;
     private readonly Lock _gate = new();
     private readonly HashSet<IPostcardSubscriber> _subscribers = [];
-    private Stored? _current;
+    private readonly IJournal<StoredPostcard> _journal;
+    private StoredPostcard? _current;
     private long _version;
 
-    public PostcardService(TimeProvider time, IOptions<ChaosOptions> options)
+    public PostcardService(TimeProvider time, IOptions<ChaosOptions> options, IJournal<StoredPostcard>? journal = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         var limits = options.Value;
         _time = time;
+        _journal = journal ?? NoJournal<StoredPostcard>.Instance;
         _posts = new KeyedTokenBuckets(limits.PostcardBurst, limits.PostcardsPerSecond, time);
         _uploads = new SemaphoreSlim(limits.PostcardUploads, limits.PostcardUploads);
         StartedAt = time.GetUtcNow();
@@ -116,7 +118,7 @@ internal sealed class PostcardService : IDisposable
 
             var id = Uuid7.After(_current?.Card.Id ?? Guid.Empty, _time.GetUtcNow());
             var card = new Postcard(id, text, [.. clean.Select(image => image.Info)], MessageMeta.Normalize(meta));
-            Replace(new Stored(card, clean));
+            Replace(new StoredPostcard(card, clean));
             return new PostcardReply(PostcardResult.Accepted, card);
         }
     }
@@ -159,7 +161,32 @@ internal sealed class PostcardService : IDisposable
                 return false;
             }
 
-            Replace(new Stored(new Postcard(id, text, [.. clean.Select(image => image.Info)], meta is { Count: > 0 } ? [.. meta] : null), clean));
+            Replace(new StoredPostcard(new Postcard(id, text, [.. clean.Select(image => image.Info)], meta is { Count: > 0 } ? [.. meta] : null), clean));
+            return true;
+        }
+    }
+
+    public bool Load(Guid id, string? text, IReadOnlyList<byte[]> images, IReadOnlyList<MetaEntry>? meta)
+    {
+        ArgumentNullException.ThrowIfNull(images);
+        text ??= "";
+        if (!Uuid7.IsValid(id)
+            || (text.Length > 0 && !MessageText.IsNormalized(text, PostcardRules.MaxTextLength))
+            || Check(text, [.. images.Select(image => (long)image.Length)]) is not PostcardResult.Accepted
+            || !MessageMeta.IsNormalized(meta)
+            || Clean(images) is not { } clean)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            if (_current is not null && _current.Card.Id.CompareTo(id) >= 0)
+            {
+                return false;
+            }
+
+            Volatile.Write(ref _current, new StoredPostcard(new Postcard(id, text, [.. clean.Select(image => image.Info)], meta is { Count: > 0 } ? [.. meta] : null), clean));
             return true;
         }
     }
@@ -223,10 +250,11 @@ internal sealed class PostcardService : IDisposable
         return clean;
     }
 
-    private void Replace(Stored next)
+    private void Replace(StoredPostcard next)
     {
         _version++;
         Volatile.Write(ref _current, next);
+        _journal.Append([next]);
         var update = PostcardUpdate.Change(_version, next.Card);
         List<IPostcardSubscriber>? dropped = null;
         foreach (var subscriber in _subscribers)
@@ -241,14 +269,6 @@ internal sealed class PostcardService : IDisposable
         {
             _subscribers.ExceptWith(dropped);
         }
-    }
-
-    private sealed record Stored(Postcard Card, CleanImage[] Images)
-    {
-        public bool Matches(string text, CleanImage[] images) =>
-            string.Equals(Card.Text, text, StringComparison.Ordinal)
-            && Images.Length == images.Length
-            && Images.Zip(images).All(pair => pair.First.Bytes.AsSpan().SequenceEqual(pair.Second.Bytes));
     }
 
     private sealed class UploadLease(SemaphoreSlim gate) : IDisposable

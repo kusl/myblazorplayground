@@ -18,9 +18,30 @@ internal static class SecurityHeaders
             return next(context);
         });
 
+    public static string? WithNoTransform(string? contentType, string? cacheControl)
+    {
+        if (contentType is null || !contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(cacheControl))
+        {
+            return "no-cache, no-transform";
+        }
+
+        return cacheControl.Contains("no-transform", StringComparison.OrdinalIgnoreCase) ? null : cacheControl + ", no-transform";
+    }
+
     private static Task Apply(object state)
     {
-        var headers = ((HttpContext)state).Response.Headers;
+        var response = ((HttpContext)state).Response;
+        var headers = response.Headers;
+        if (WithNoTransform(response.ContentType, headers.CacheControl) is { } cacheControl)
+        {
+            headers.CacheControl = cacheControl;
+        }
+
         headers.ContentSecurityPolicy = ContentSecurityPolicy;
         headers.XContentTypeOptions = "nosniff";
         headers["Referrer-Policy"] = "no-referrer";

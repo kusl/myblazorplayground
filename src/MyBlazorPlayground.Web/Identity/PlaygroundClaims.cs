@@ -10,6 +10,7 @@ public static class PlaygroundClaims
 {
     public const string DisplayNameClaim = "playground:display_name";
     public const string StampClaim = "playground:stamp";
+    public const string RememberClaim = "playground:remember";
 
     internal static ClaimsPrincipal Create(PersonRecord person)
     {
@@ -27,6 +28,18 @@ public static class PlaygroundClaims
         }
 
         return new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme, ClaimTypes.Name, ClaimTypes.Role));
+    }
+
+    internal static ClaimsPrincipal Pending(PersonRecord person, bool remember)
+    {
+        ArgumentNullException.ThrowIfNull(person);
+        Claim[] claims =
+        [
+            new(ClaimTypes.NameIdentifier, person.Id.ToString("D", CultureInfo.InvariantCulture)),
+            new(StampClaim, person.SecurityStamp.ToString("D", CultureInfo.InvariantCulture)),
+            new(RememberClaim, remember ? "true" : "false"),
+        ];
+        return new ClaimsPrincipal(new ClaimsIdentity(claims, IdentityRegistration.TwoFactorScheme));
     }
 
     public static Guid? PersonId(this ClaimsPrincipal? principal) =>

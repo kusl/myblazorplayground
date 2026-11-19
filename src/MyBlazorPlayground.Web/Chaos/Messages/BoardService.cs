@@ -12,15 +12,17 @@ internal sealed class BoardService
     private readonly KeyedTokenBuckets _posts;
     private readonly Lock _gate = new();
     private readonly HashSet<IBoardSubscriber> _subscribers = [];
+    private readonly IJournal<BoardMessage> _journal;
     private BoardMessage[] _messages = [];
     private long _version;
 
-    public BoardService(TimeProvider time, IOptions<ChaosOptions> options)
+    public BoardService(TimeProvider time, IOptions<ChaosOptions> options, IJournal<BoardMessage>? journal = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(options);
         var limits = options.Value;
         _time = time;
+        _journal = journal ?? NoJournal<BoardMessage>.Instance;
         Capacity = limits.BoardCapacity;
         _posts = new KeyedTokenBuckets(limits.PostBurst, limits.PostsPerSecond, time);
         StartedAt = time.GetUtcNow();
@@ -99,6 +101,22 @@ internal sealed class BoardService
         }
     }
 
+    public int Load(IEnumerable<BoardMessage> stored)
+    {
+        ArgumentNullException.ThrowIfNull(stored);
+        var valid = stored.Where(IsStored).ToList();
+        lock (_gate)
+        {
+            if (MessageWindow.Merge(_messages, valid, Capacity) is { } change)
+            {
+                Volatile.Write(ref _messages, change.Next);
+                return change.Added.Length;
+            }
+
+            return 0;
+        }
+    }
+
     public void Subscribe(IBoardSubscriber subscriber)
     {
         ArgumentNullException.ThrowIfNull(subscriber);
@@ -127,6 +145,12 @@ internal sealed class BoardService
         }
     }
 
+    private static bool IsStored(BoardMessage message) =>
+        message is not null
+        && Uuid7.IsValid(message.Id)
+        && MessageText.IsNormalized(message.Text)
+        && MessageMeta.IsNormalized(message.Meta);
+
     private bool IsAcceptable(BoardMessage message, DateTimeOffset now) =>
         message is not null
         && MessageWindow.IsRestorable(message.Id, now, StartedAt)
@@ -144,6 +168,7 @@ internal sealed class BoardService
         var previous = _version;
         _version++;
         Volatile.Write(ref _messages, change.Next);
+        _journal.Append(change.Added);
         Broadcast(BoardUpdate.Delta(_version, previous, change.Added, change.Removed));
         return change.Added.Length;
     }
