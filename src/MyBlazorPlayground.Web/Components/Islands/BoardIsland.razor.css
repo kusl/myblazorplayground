@@ -26,9 +26,8 @@ textarea:disabled {
 }
 
 .status {
+    display: block;
     flex: 1;
-    color: var(--danger);
-    font-size: .875rem;
 }
 
 .hint {

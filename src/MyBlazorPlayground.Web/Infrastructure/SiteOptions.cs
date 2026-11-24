@@ -12,9 +12,9 @@ internal sealed class SiteOptions
 
     public IList<string> AllowedOrigins { get; } = [];
 
-    public int MaxConnectionsPerClient { get; set; } = 8;
+    public int MaxConnectionsPerClient { get; set; } = 64;
 
-    public int MaxConnections { get; set; } = 200;
+    public int MaxConnections { get; set; } = 400;
 
     public int RequestsPerSecond { get; set; } = 20;
 

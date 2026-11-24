@@ -1,4 +1,5 @@
 import { LocalHistory, POSITION_OPTIONS, announce, collectMeta, countText, excessOf, isoOf, labelOf, metaElement, newestFirst, readShare, shareDefault, writeShare } from './BoardIsland.razor.js';
+import { showStatus } from '../../js/status.js';
 
 export const DB_NAME = 'chaos-postcards';
 export const DB_VERSION = 1;
@@ -380,9 +381,9 @@ class PostcardClient {
         await this.join();
     }
 
-    say(text) {
-        if (this.status && !this.disposed) {
-            this.status.textContent = text ?? '';
+    say(text, tone = null) {
+        if (!this.disposed) {
+            showStatus(this.status, text, tone);
         }
     }
 
@@ -528,7 +529,7 @@ class PostcardClient {
         if (this.button) {
             this.button.disabled = true;
         }
-        this.say(this.attachments.length > 0 ? 'Sending your postcard and its images.' : 'Sending your postcard.');
+        this.say(this.attachments.length > 0 ? 'Sending your postcard and its images.' : 'Sending your postcard.', 'note');
         let streams = [];
         try {
             const meta = await this.share.meta();

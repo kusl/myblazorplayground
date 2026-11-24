@@ -2,6 +2,7 @@ import { compareKeys, guessAddress, keyLabel, keyUrl, parseLink, providerLabel, 
 import { ADDRESS_FIELDS, FIELDS, changedFields, displayValue, placeOf, summaryOf } from '../../js/fields.js';
 import { findListing } from '../../js/merge.js';
 import { readDraft, writeDraft } from '../../js/store.js';
+import { showStatus } from '../../js/status.js';
 import { RESULT_TEXT, STATUS_TEXT, isoOf, timeLabel } from './HomesPage.razor.js';
 
 export const COMMENT_MAX = 4000;
@@ -346,9 +347,7 @@ class ListingView {
         try {
             const outcome = await this.nest.post(draft);
             const ok = outcome.result === 'accepted' || outcome.result === 'exists';
-            if (output) {
-                output.textContent = ok ? '' : RESULT_TEXT[outcome.result] ?? RESULT_TEXT.invalid;
-            }
+            showStatus(output, ok ? '' : RESULT_TEXT[outcome.result] ?? RESULT_TEXT.invalid);
             return ok ? outcome : null;
         } finally {
             this.busy = false;
@@ -364,7 +363,7 @@ class ListingView {
         event.preventDefault();
         const text = this.commentText?.value ?? '';
         if (text.trim().length === 0) {
-            this.commentStatus.textContent = 'Write something first.';
+            showStatus(this.commentStatus, 'Write something first.');
             return;
         }
         const outcome = await this.send({ kind: 'comment', anchors: this.anchors(), text }, this.commentStatus);
@@ -394,18 +393,18 @@ class ListingView {
                     output.textContent = error;
                 }
             }
-            this.factsStatus.textContent = 'Fix the highlighted values.';
+            showStatus(this.factsStatus, 'Fix the highlighted values.');
             this.factsForm.elements.namedItem(errors[0].key)?.focus();
             return;
         }
         if (changes.length === 0) {
-            this.factsStatus.textContent = 'Nothing changed.';
+            showStatus(this.factsStatus, 'Nothing changed.', 'note');
             return;
         }
         const outcome = await this.send({ kind: 'fact', anchors: this.anchors(), fields: changes }, this.factsStatus);
         if (outcome) {
             this.dirty = false;
-            this.factsStatus.textContent = 'Saved.';
+            showStatus(this.factsStatus, 'Saved.', 'ok');
             this.render();
         }
     }
@@ -414,17 +413,17 @@ class ListingView {
         event.preventDefault();
         const parsed = parseLink(this.linkInput?.value ?? '');
         if (!parsed) {
-            this.linkStatus.textContent = 'Paste a full link that starts with https://';
+            showStatus(this.linkStatus, 'Paste a full link that starts with https://');
             return;
         }
         if (this.listing?.keys.includes(parsed.key)) {
-            this.linkStatus.textContent = 'This home already has that link.';
+            showStatus(this.linkStatus, 'This home already has that link.');
             return;
         }
         const outcome = await this.send({ kind: 'link', anchors: this.anchors(), url: parsed.url }, this.linkStatus);
         if (outcome) {
             this.linkInput.value = '';
-            this.linkStatus.textContent = 'Link added.';
+            showStatus(this.linkStatus, 'Link added.', 'ok');
         }
     }
 

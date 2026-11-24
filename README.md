@@ -51,6 +51,8 @@ Environment variables, or `.env` for the containers:
 | `ConnectionStrings__Playground` | set by compose from `POSTGRES_*` |
 | `Site__Name`, `Site__TimeZone`, `Site__SourceUrl` | `my blazor playground`, `America/New_York`, this repository |
 | `Site__AllowedOrigins__0` | none; the request host is always allowed |
+| `Site__MaxConnectionsPerClient`, `Site__MaxConnections` | 64 live connections per client address (IPv4, or IPv6 /64), 400 in total |
+| `Site__RequestsPerSecond`, `Site__RequestBurst` | 20 requests a second per client address, bursts of 240 |
 | `Work__MaxAttachmentBytes` | 99614720 (95 MiB, under Cloudflare's 100 MB request limit) |
 | `Chaos__*`, `Nest__*` | limits of the toys and homes (live window sizes; the database keeps everything) |
 

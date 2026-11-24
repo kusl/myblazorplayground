@@ -1,0 +1,96 @@
+.progress {
+    block-size: .5rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface);
+}
+
+.progress > span {
+    display: block;
+    block-size: 100%;
+    background: var(--ink);
+}
+
+.progress > .w-0 {
+    inline-size: 0%;
+}
+
+.progress > .w-5 {
+    inline-size: 5%;
+}
+
+.progress > .w-10 {
+    inline-size: 10%;
+}
+
+.progress > .w-15 {
+    inline-size: 15%;
+}
+
+.progress > .w-20 {
+    inline-size: 20%;
+}
+
+.progress > .w-25 {
+    inline-size: 25%;
+}
+
+.progress > .w-30 {
+    inline-size: 30%;
+}
+
+.progress > .w-35 {
+    inline-size: 35%;
+}
+
+.progress > .w-40 {
+    inline-size: 40%;
+}
+
+.progress > .w-45 {
+    inline-size: 45%;
+}
+
+.progress > .w-50 {
+    inline-size: 50%;
+}
+
+.progress > .w-55 {
+    inline-size: 55%;
+}
+
+.progress > .w-60 {
+    inline-size: 60%;
+}
+
+.progress > .w-65 {
+    inline-size: 65%;
+}
+
+.progress > .w-70 {
+    inline-size: 70%;
+}
+
+.progress > .w-75 {
+    inline-size: 75%;
+}
+
+.progress > .w-80 {
+    inline-size: 80%;
+}
+
+.progress > .w-85 {
+    inline-size: 85%;
+}
+
+.progress > .w-90 {
+    inline-size: 90%;
+}
+
+.progress > .w-95 {
+    inline-size: 95%;
+}
+
+.progress > .w-100 {
+    inline-size: 100%;
+}

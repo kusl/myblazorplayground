@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.Extensions.Options;
 
 namespace MyBlazorPlayground.Web.Infrastructure;
@@ -5,6 +6,12 @@ namespace MyBlazorPlayground.Web.Infrastructure;
 internal static partial class HubGuard
 {
     public static readonly PathString HubPath = new("/_blazor");
+
+    public static void ConfigureConnection(HttpConnectionDispatcherOptions connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        connection.Transports = HttpTransportType.WebSockets;
+    }
 
     public static IApplicationBuilder UseHubGuard(this IApplicationBuilder app)
     {

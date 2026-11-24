@@ -17,5 +17,6 @@
 | [0013](0013-dependencies.md) | Dependencies |
 | [0014](0014-two-step-sign-in.md) | Optional two-step sign in with authenticator apps |
 | [0015](0015-toys-in-postgresql.md) | The toys keep everything in PostgreSQL |
+| [0016](0016-styles.md) | Shared styles stay generic, feature styles stay isolated |
 
 Carried over from chaos (`toys/`) and nest (`homes/`), still describing how those features work: message ids, local history, canvas, realtime delivery, slots, latency, server clock, message details, postcards, reading; entries and handshake, listing identity, links and keys, details, local storage, realtime delivery.

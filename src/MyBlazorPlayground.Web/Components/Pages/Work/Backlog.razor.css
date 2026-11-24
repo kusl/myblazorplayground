@@ -1,0 +1,12 @@
+.filters {
+    margin: 1rem 0;
+}
+
+.filters > summary {
+    color: var(--link);
+    cursor: pointer;
+}
+
+.filters > form {
+    margin-block-start: .75rem;
+}

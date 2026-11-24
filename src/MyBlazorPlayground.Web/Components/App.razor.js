@@ -83,6 +83,16 @@ export function toggledTheme(current, prefersDark) {
     return effective === 'dark' ? 'light' : 'dark';
 }
 
+export const ERROR_UI_ID = 'blazor-error-ui';
+
+export function trackCircuit(doc) {
+    const mark = state => doc.getElementById(ERROR_UI_ID)?.setAttribute('data-circuit', state);
+    mark('none');
+    return {
+        onCircuitOpened: () => mark('open'),
+    };
+}
+
 export function reconnectDelay(attempt, random = Math.random) {
     if (attempt <= 0) {
         return 0;
@@ -423,6 +433,7 @@ export function boot(win) {
 
     return win.Blazor.start({
         circuit: {
+            circuitHandlers: [trackCircuit(doc)],
             reconnectionOptions: {
                 maxRetries: MAX_RETRIES,
                 retryIntervalMilliseconds: attempt => reconnectDelay(attempt),

@@ -1,0 +1,25 @@
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: .75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.project-card {
+    display: grid;
+    gap: .35rem;
+    block-size: 100%;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--fg);
+    background: var(--raised);
+    text-decoration: none;
+}
+
+.project-card strong {
+    color: var(--ink);
+    font-size: 1.1rem;
+}

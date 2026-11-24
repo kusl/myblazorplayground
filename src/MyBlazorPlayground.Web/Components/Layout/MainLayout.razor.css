@@ -136,6 +136,15 @@ main:has(.wide) {
     border-block-start: 2px solid var(--danger);
 }
 
+#blazor-error-ui .when-refused,
+#blazor-error-ui[data-circuit="none"] .when-broken {
+    display: none;
+}
+
+#blazor-error-ui[data-circuit="none"] .when-refused {
+    display: inline;
+}
+
 #blazor-error-ui .dismiss {
     position: absolute;
     inset-block-start: .6rem;

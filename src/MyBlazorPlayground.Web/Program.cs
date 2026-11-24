@@ -53,7 +53,11 @@ app.MapAccountEndpoints();
 app.MapWorkEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode(server => server.DisableWebSocketCompression = true);
+    .AddInteractiveServerRenderMode(server =>
+    {
+        server.DisableWebSocketCompression = true;
+        server.ConfigureConnection = HubGuard.ConfigureConnection;
+    });
 
 await app.RunAsync();
 

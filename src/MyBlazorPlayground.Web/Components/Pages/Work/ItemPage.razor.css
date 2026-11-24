@@ -1,0 +1,65 @@
+.split {
+    display: grid;
+    gap: 1.5rem;
+}
+
+@media (width >= 64rem) {
+    .split {
+        grid-template-columns: minmax(0, 1fr) 20rem;
+        align-items: start;
+    }
+}
+
+.attachments {
+    display: grid;
+    gap: .5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.attachments li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem .75rem;
+}
+
+.attachments img {
+    max-inline-size: 8rem;
+    max-block-size: 6rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+
+.comments {
+    display: grid;
+    gap: .75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.comment {
+    padding: .75rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--raised);
+}
+
+.comment header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .25rem .75rem;
+    margin-block-end: .4rem;
+    color: var(--muted);
+    font-size: .85rem;
+}
+
+.history {
+    margin: 0;
+    padding-inline-start: 1.1rem;
+    color: var(--muted);
+    font-size: .875rem;
+}

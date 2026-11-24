@@ -250,6 +250,7 @@
 }
 
 .status {
+    display: block;
     min-block-size: 1.4em;
     color: #ffe2a8;
     font-size: .9rem;

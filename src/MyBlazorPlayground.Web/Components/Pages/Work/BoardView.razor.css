@@ -1,0 +1,79 @@
+.board {
+    position: relative;
+    display: grid;
+    max-inline-size: 100%;
+    grid-auto-columns: minmax(16rem, 85vw);
+    grid-auto-flow: column;
+    gap: .75rem;
+    overflow-x: auto;
+    padding-block-end: .5rem;
+    scroll-snap-type: x mandatory;
+}
+
+@media (width >= 48rem) {
+    .board {
+        grid-auto-columns: minmax(15rem, 1fr);
+        scroll-snap-type: none;
+    }
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    min-block-size: 10rem;
+    padding: .6rem;
+    border-radius: var(--radius);
+    background: var(--surface);
+    scroll-snap-align: start;
+}
+
+.column h2 {
+    display: flex;
+    justify-content: space-between;
+    margin: 0 0 .25rem;
+    font-size: .95rem;
+}
+
+.column.drop-target {
+    outline: 2px dashed var(--ink);
+}
+
+.card {
+    position: relative;
+    display: grid;
+    gap: .35rem;
+    padding: .6rem .7rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--raised);
+}
+
+.card[draggable="true"] {
+    cursor: grab;
+}
+
+.card .card-title {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem .4rem;
+    align-items: center;
+    color: var(--muted);
+    font-size: .8rem;
+}
+
+.card form {
+    display: flex;
+    gap: .35rem;
+}
+
+.card select {
+    min-block-size: 2.1rem;
+    padding: .2rem .4rem;
+    font-size: .85rem;
+}

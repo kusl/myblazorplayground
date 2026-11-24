@@ -1,0 +1,28 @@
+.editor {
+    display: grid;
+    gap: .4rem;
+}
+
+.editor textarea {
+    min-block-size: 10rem;
+    font-family: var(--mono);
+    font-size: .9rem;
+}
+
+.editor.dragging textarea {
+    outline: 2px dashed var(--ink);
+}
+
+.editor-preview {
+    min-block-size: 3rem;
+    padding: .75rem 1rem;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+}
+
+.editor-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+}

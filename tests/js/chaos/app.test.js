@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    ERROR_UI_ID,
     MAX_RETRIES,
     THEME_KEY,
     better,
@@ -8,6 +9,7 @@ import {
     sample,
     storedTheme,
     toggledTheme,
+    trackCircuit,
     uncertainty,
     untilNextSecond,
     zoneLabel,
@@ -93,5 +95,26 @@ describe('server clock', () => {
         expect(untilNextSecond(1000)).toBe(1005);
         expect(untilNextSecond(1999)).toBe(6);
         expect(untilNextSecond(1500.7)).toBe(505);
+    });
+});
+
+describe('trackCircuit', () => {
+    function page() {
+        const attributes = new Map();
+        const element = { setAttribute: (name, value) => attributes.set(name, value) };
+        return { attributes, doc: { getElementById: id => (id === ERROR_UI_ID ? element : null) } };
+    }
+
+    it('marks the error message as a connection problem until a circuit opens', () => {
+        const { attributes, doc } = page();
+        const handler = trackCircuit(doc);
+        expect(attributes.get('data-circuit')).toBe('none');
+        handler.onCircuitOpened();
+        expect(attributes.get('data-circuit')).toBe('open');
+    });
+
+    it('works without the error message', () => {
+        const handler = trackCircuit({ getElementById: () => null });
+        expect(() => handler.onCircuitOpened()).not.toThrow();
     });
 });

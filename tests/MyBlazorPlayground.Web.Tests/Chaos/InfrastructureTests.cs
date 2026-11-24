@@ -1,6 +1,7 @@
 using System.Net;
 using MyBlazorPlayground.Web.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Connections;
 
 namespace MyBlazorPlayground.Web.Tests.Chaos;
 
@@ -73,6 +74,19 @@ public sealed class ConnectionTrackerTests
         third?.Dispose();
         fourth?.Dispose();
         Assert.Equal(0, tracker.Total);
+    }
+}
+
+public sealed class HubGuardTests
+{
+    [Fact]
+    public void OffersOnlyWebSockets()
+    {
+        var connection = new HttpConnectionDispatcherOptions();
+
+        HubGuard.ConfigureConnection(connection);
+
+        Assert.Equal(HttpTransportType.WebSockets, connection.Transports);
     }
 }
 
