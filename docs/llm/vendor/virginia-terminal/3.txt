@@ -1,0 +1,120 @@
+kushal@fedora:~/Videos/dl$ ssh virginia
+Linux virginia 6.12.117+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.117-1 (2026-11-12) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Sat Nov 21 09:45:14 2026 from 100.105.139.82
+kushal@virginia:~$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.033s
+user	0m0.004s
+sys	0m0.011s
+remote: Enumerating objects: 12, done.
+remote: Counting objects: 100% (12/12), done.
+remote: Compressing objects: 100% (5/5), done.
+remote: Total 7 (delta 2), reused 7 (delta 2), pack-reused 0 (from 0)
+Unpacking objects: 100% (7/7), 5.38 KiB | 1.08 MiB/s, done.
+From https://github.com/kusl/myblazorplayground
+   c006312..0c2f12b  main       -> origin/main
+
+real	0m0.386s
+user	0m0.112s
+sys	0m0.049s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (local out of date)
+
+real	0m0.265s
+user	0m0.095s
+sys	0m0.037s
+On branch main
+Your branch is behind 'origin/main' by 1 commit, and can be fast-forwarded.
+  (use "git pull" to update your local branch)
+
+nothing to commit, working tree clean
+Updating c006312..0c2f12b
+Fast-forward
+ docs/llm/vendor/virginia-terminal/2.txt | 371 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 371 insertions(+)
+ create mode 100644 docs/llm/vendor/virginia-terminal/2.txt
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+CONTAINER ID  IMAGE                                    COMMAND     CREATED     STATUS               PORTS                     NAMES
+f820c3dc92f8  docker.io/library/postgres:18-alpine     postgres    5 days ago  Up 5 days (healthy)  127.0.0.1:5433->5432/tcp  myblazorplayground_postgres_1
+4f1bbe41d9d5  localhost/myblazorplayground-web:latest              5 days ago  Up 5 days            127.0.0.1:8090->8080/tcp  myblazorplayground_web_1
+CONTAINER ID  IMAGE                                    COMMAND               CREATED     STATUS      PORTS       NAMES
+4832fef8a3e8  docker.io/cloudflare/cloudflared:latest  tunnel --no-autou...  5 days ago  Up 5 days               myblazorplayground-tunnel
+[instance] site: ready at http://127.0.0.1:8090
+[instance] tunnel: https://pmid-comparable-valley-archived.trycloudflare.com
+
+real	0m0.742s
+user	0m0.512s
+sys	0m0.159s
+kushal@virginia:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh status logs
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.011s
+user	0m0.001s
+sys	0m0.010s
+
+real	0m0.321s
+user	0m0.124s
+sys	0m0.027s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (up to date)
+
+real	0m0.263s
+user	0m0.099s
+sys	0m0.019s
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+CONTAINER ID  IMAGE                                    COMMAND     CREATED     STATUS               PORTS                     NAMES
+f820c3dc92f8  docker.io/library/postgres:18-alpine     postgres    5 days ago  Up 5 days (healthy)  127.0.0.1:5433->5432/tcp  myblazorplayground_postgres_1
+4f1bbe41d9d5  localhost/myblazorplayground-web:latest              5 days ago  Up 5 days            127.0.0.1:8090->8080/tcp  myblazorplayground_web_1
+CONTAINER ID  IMAGE                                    COMMAND               CREATED     STATUS      PORTS       NAMES
+4832fef8a3e8  docker.io/cloudflare/cloudflared:latest  tunnel --no-autou...  5 days ago  Up 5 days               myblazorplayground-tunnel
+[instance] site: ready at http://127.0.0.1:8090
+[instance] tunnel: https://pmid-comparable-valley-archived.trycloudflare.com
+
+real	0m0.760s
+user	0m0.517s
+sys	0m0.139s
+kushal@virginia:~/src/dotnet/myblazorplayground$ exit
+logout
+Connection to virginia closed.
+kushal@fedora:~/Videos/dl$ 
