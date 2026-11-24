@@ -1,12 +1,12 @@
 ===============================================================================
 PROJECT EXPORT
-Generated (UTC): 2026-11-24 20:39:41
+Generated (UTC): 2026-11-24 21:31:31
 Project Path:    /home/kushal/src/dotnet/myblazorplayground
-Git Commit:      dd41c316a818d38a7f70d6557ab67a2c7c8af2a0
+Git Commit:      ecca8de83b7f703bcb047be22361705fd8f42040
 Git Branch:      main
 Git Dirty:       no
 .NET SDK:        11.0.100-rc.3.26522.148
-Files Exported:  388
+Files Exported:  397
 ===============================================================================
 
 DIRECTORY STRUCTURE (exported files only):
@@ -46,6 +46,7 @@ DIRECTORY STRUCTURE (exported files only):
             0013-dependencies.md
             0014-two-step-sign-in.md
             0015-toys-in-postgresql.md
+            0016-styles.md
             README.md
             homes/
                 0004-entries-and-handshake.md
@@ -286,12 +287,17 @@ DIRECTORY STRUCTURE (exported files only):
                     SlotsPage.razor.css
                     Work/
                         Backlog.razor
+                        Backlog.razor.css
                         BoardView.razor
+                        BoardView.razor.css
                         ItemPage.razor
+                        ItemPage.razor.css
                         NewItem.razor
                         ProjectSettings.razor
                         SprintsPage.razor
+                        SprintsPage.razor.css
                         WorkHome.razor
+                        WorkHome.razor.css
                 Routes.razor
                 Shared/
                     AdminTabs.razor
@@ -304,6 +310,7 @@ DIRECTORY STRUCTURE (exported files only):
                     ProjectHeader.razor
                     RedirectToSignIn.razor
                     RichEditor.razor
+                    RichEditor.razor.css
                 _Imports.razor
             Identity/
                 AccountService.cs
@@ -382,6 +389,7 @@ DIRECTORY STRUCTURE (exported files only):
                     fields.js
                     keys.js
                     merge.js
+                    status.js
                     store.js
                     sync.js
                 theme-init.js
@@ -465,6 +473,8 @@ DIRECTORY STRUCTURE (exported files only):
                 sync.test.js
                 views.test.js
             package.json
+            shared/
+                status.test.js
             vitest.config.mjs
             work/
                 editor.test.js
@@ -830,10 +840,10 @@ MODIFIED: 2026-11-19 10:12:55 (UTC)
 
 ================================================================================
 FILE:     README.md
-SIZE:     3.77 KB (3858 bytes)
-LINES:    59
-SHA256:   b09322e421f65ebae39a2e2eaeb4c9446600fec7265afaf87ee8327155e51edb
-MODIFIED: 2026-11-19 12:39:39 (UTC)
+SIZE:     4.01 KB (4102 bytes)
+LINES:    61
+SHA256:   c626620a3038b1f3e2a3771cda669c6f138b4fd0a349a9d55283b50865d82296
+MODIFIED: 2026-11-24 20:52:18 (UTC)
 ================================================================================
 
 # my blazor playground
@@ -889,6 +899,8 @@ Environment variables, or `.env` for the containers:
 | `ConnectionStrings__Playground` | set by compose from `POSTGRES_*` |
 | `Site__Name`, `Site__TimeZone`, `Site__SourceUrl` | `my blazor playground`, `America/New_York`, this repository |
 | `Site__AllowedOrigins__0` | none; the request host is always allowed |
+| `Site__MaxConnectionsPerClient`, `Site__MaxConnections` | 64 live connections per client address (IPv4, or IPv6 /64), 400 in total |
+| `Site__RequestsPerSecond`, `Site__RequestBurst` | 20 requests a second per client address, bursts of 240 |
 | `Work__MaxAttachmentBytes` | 99614720 (95 MiB, under Cloudflare's 100 MB request limit) |
 | `Chaos__*`, `Nest__*` | limits of the toys and homes (live window sizes; the database keeps everything) |
 
@@ -1175,10 +1187,10 @@ Status: accepted
 
 ================================================================================
 FILE:     docs/adr/0011-security.md
-SIZE:     1.15 KB (1173 bytes)
-LINES:    10
-SHA256:   e74a2776df89f2f4a14f1df99c093df1d574b6dbd6b74853e4177e95e367bf89
-MODIFIED: 2026-11-19 12:39:26 (UTC)
+SIZE:     1.63 KB (1666 bytes)
+LINES:    11
+SHA256:   29578454702860a3f94fab8d8911497b3ec63dd273ecd10fa6d0100cc5adf43b
+MODIFIED: 2026-11-24 20:52:18 (UTC)
 ================================================================================
 
 # 0011 Headers, CSP and forms
@@ -1187,7 +1199,8 @@ Status: accepted
 
 - The chaos policy stays: `default-src 'self'`, scripts and styles only from this site, no inline scripts or `style` attributes, `img-src 'self' blob:`, `connect-src 'self'` plus the latency endpoints, `frame-ancestors 'none'`, `form-action 'self'`. Progress bars use classes, not inline widths.
 - Chaos and nest replaced antiforgery with a cookieless stub because they had no forms. This site has forms, so the standard antiforgery cookie and tokens are back. JSON endpoints validate the token from the `RequestVerificationToken` header.
-- `/_blazor` only accepts WebSockets from this origin (or `Site__AllowedOrigins`), with per-client and total connection limits. Requests are rate limited per client address after `X-Forwarded-For`.
+- `/_blazor` only accepts WebSockets from this origin (or `Site__AllowedOrigins`), with per-client and total connection limits. Negotiation offers only WebSockets, so a refused browser does not fall back to server-sent events or long polling (which the guard answers with 400). Requests are rate limited per client address after `X-Forwarded-For`.
+- A client address is often shared: a household behind one router, an office, a mobile carrier's NAT. The per-client limit (64) is sized for many tabs and devices on one address; the total (400) protects the server. A tab that is refused keeps its server-rendered page and says that live updates could not start, instead of the generic error.
 - Return URLs after sign-in are accepted only when they are local paths.
 - Rendered user content goes through `RichText` or Razor encoding only.
 - HTML responses add `no-transform` to `Cache-Control` so proxies leave the markup alone. Cloudflare may still inject an inline bot-detection script on quick tunnels; the CSP blocks it on purpose and the console warning about it is harmless.
@@ -1195,10 +1208,10 @@ Status: accepted
 
 ================================================================================
 FILE:     docs/adr/0012-testing.md
-SIZE:     0.87 KB (887 bytes)
+SIZE:     0.91 KB (934 bytes)
 LINES:    9
-SHA256:   ab82a00aafb2caee9589141040d3f3e34b7b1e45846903a21da158bc5fd749e5
-MODIFIED: 2026-11-19 10:57:08 (UTC)
+SHA256:   864d91dd859aca6f57043946afaed47d7c399c87747878da692587c2c2e9717c
+MODIFIED: 2026-11-24 20:52:22 (UTC)
 ================================================================================
 
 # 0012 Tests
@@ -1208,7 +1221,7 @@ Status: accepted
 - `tests/MyBlazorPlayground.Domain.Tests`: rich text (including what may never be emitted), hashing, setup codes, account, work and file rules, the access policy.
 - `tests/MyBlazorPlayground.Data.Tests`: every store against a real PostgreSQL. Each test creates its own database, migrates it and drops it. They run when `PLAYGROUND_TEST_DATABASE` names a server that may create databases; `scripts/test.sh` starts a throwaway container for them, CI uses a service container, and otherwise they are skipped.
 - `tests/MyBlazorPlayground.Web.Tests`: the chaos and nest unit tests, ported, plus homes persistence and tombstones, form defaults and return URLs.
-- `tests/js`: the chaos and nest Vitest suites plus the editor helpers and the enhancer, with `tests/fixtures/nest` shared with C# as before.
+- `tests/js`: the chaos and nest Vitest suites plus the editor helpers, the enhancer, the shared status helper and the circuit tracker, with `tests/fixtures/nest` shared with C# as before.
 - xUnit v3 on Microsoft Testing Platform (`global.json`).
 
 
@@ -1273,11 +1286,31 @@ Status: accepted. Supersedes 0008.
 
 
 ================================================================================
+FILE:     docs/adr/0016-styles.md
+SIZE:     1.51 KB (1551 bytes)
+LINES:    10
+SHA256:   e19230b0f854e8e156c8ff0f863efeeb18d7f38a768ad33d4c6080bc45827f35
+MODIFIED: 2026-11-24 20:52:18 (UTC)
+================================================================================
+
+# 0016 Shared styles stay generic, feature styles stay isolated
+
+Status: accepted
+
+- `wwwroot/app.css` holds the theme variables, element defaults and utilities that several features share on purpose: `lede`, `muted`, `hint`, `empty`, `status`, `badge`, `notice`, `form`, `field`, `actions`, `panel`, `stack`, `item-list`, `crumbs`, `danger-zone` and the like.
+- Anything one component owns lives in that component's isolated stylesheet (`*.razor.css`), even when the class name looks generic: the work board (`board`, `column`, `card`), sprint progress bars, the item page (`split`, `attachments`, `comments`, `history`), the rich text editor, the project cards and the backlog filters.
+- Reason: global rules with generic names leaked into the toys. The sprint `.progress` bar clipped the slots and latency counters to half a line, the work `.board` laid the latency leaderboards out sideways, `.history` shrank and indented the reading list, and `.card`, `.editor` and `.badge` changed postcards, the home details editor and slot badges.
+- A component that reuses a shared utility name only adds to it. Islands keep their status line in the layout (`display: block`), because the shared `.status:empty` rule hides empty statuses.
+- Status lines are errors unless JavaScript marks them with `data-tone="ok"` (good news) or `data-tone="note"` (progress, nothing to fix), through `wwwroot/js/status.js`.
+- Elements that JavaScript creates carry no scope attribute, so isolated rules reach them through `::deep` from an element the component rendered.
+
+
+================================================================================
 FILE:     docs/adr/README.md
-SIZE:     1.43 KB (1469 bytes)
-LINES:    21
-SHA256:   11f025349d704b611dbcc9b1bedb3ea2e046e0b74303a4360819831533e37528
-MODIFIED: 2026-11-19 12:39:26 (UTC)
+SIZE:     1.52 KB (1555 bytes)
+LINES:    22
+SHA256:   fcd8cac894b6cb06d378e2ea223f3df71e1b8b632c2c878ecf56052338a3a715
+MODIFIED: 2026-11-24 20:52:18 (UTC)
 ================================================================================
 
 # Architecture decision records
@@ -1299,6 +1332,7 @@ MODIFIED: 2026-11-19 12:39:26 (UTC)
 | [0013](0013-dependencies.md) | Dependencies |
 | [0014](0014-two-step-sign-in.md) | Optional two-step sign in with authenticator apps |
 | [0015](0015-toys-in-postgresql.md) | The toys keep everything in PostgreSQL |
+| [0016](0016-styles.md) | Shared styles stay generic, feature styles stay isolated |
 
 Carried over from chaos (`toys/`) and nest (`homes/`), still describing how those features work: message ids, local history, canvas, realtime delivery, slots, latency, server clock, message details, postcards, reading; entries and handshake, listing identity, links and keys, details, local storage, realtime delivery.
 
@@ -12232,10 +12266,10 @@ MODIFIED: 2026-11-19 10:22:11 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/App.razor.js
-SIZE:     14.12 KB (14454 bytes)
-LINES:    436
-SHA256:   3c49060d2e27342913c83144572f40c724c4d8605f548fffc4b64bddcb1640b0
-MODIFIED: 2026-11-19 12:30:35 (UTC)
+SIZE:     14.42 KB (14769 bytes)
+LINES:    447
+SHA256:   8dd1c7dee534a3764c871e037dca6593eed9c3e1cc5e8876a4300b28766b0e99
+MODIFIED: 2026-11-24 20:50:18 (UTC)
 ================================================================================
 
 export const THEME_KEY = 'playground-theme';
@@ -12321,6 +12355,16 @@ export function storedTheme(storage) {
 export function toggledTheme(current, prefersDark) {
     const effective = current ?? (prefersDark ? 'dark' : 'light');
     return effective === 'dark' ? 'light' : 'dark';
+}
+
+export const ERROR_UI_ID = 'blazor-error-ui';
+
+export function trackCircuit(doc) {
+    const mark = state => doc.getElementById(ERROR_UI_ID)?.setAttribute('data-circuit', state);
+    mark('none');
+    return {
+        onCircuitOpened: () => mark('open'),
+    };
 }
 
 export function reconnectDelay(attempt, random = Math.random) {
@@ -12663,6 +12707,7 @@ export function boot(win) {
 
     return win.Blazor.start({
         circuit: {
+            circuitHandlers: [trackCircuit(doc)],
             reconnectionOptions: {
                 maxRetries: MAX_RETRIES,
                 retryIntervalMilliseconds: attempt => reconnectDelay(attempt),
@@ -12897,10 +12942,10 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Islands/BoardIsland.razor.css
-SIZE:     1.04 KB (1061 bytes)
-LINES:    72
-SHA256:   10cee4ceab7b3fd2e028e2dfac1d94ca26718f1a94b8f3a501de4cdde4afa190
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     1.01 KB (1031 bytes)
+LINES:    71
+SHA256:   d774676eb6460e71312fe6b0d0d1c25bdc39aa83f130eed4efca55ee0a0d4cc4
+MODIFIED: 2026-11-24 20:49:20 (UTC)
 ================================================================================
 
 .compose {
@@ -12931,9 +12976,8 @@ textarea:disabled {
 }
 
 .status {
+    display: block;
     flex: 1;
-    color: var(--danger);
-    font-size: .875rem;
 }
 
 .hint {
@@ -15038,10 +15082,10 @@ MODIFIED: 2026-11-19 12:30:23 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Islands/LatencyIsland.razor.css
-SIZE:     1.50 KB (1536 bytes)
-LINES:    96
-SHA256:   e7fcf1712a9433d7e4ffa05eaab33ec3a384072428b4c4bc3d43338a43bcbee3
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     1.52 KB (1556 bytes)
+LINES:    97
+SHA256:   165be1d11891654d4d0d8d4621518898a0d4dd464d2da95db3ef422da5188ad4
+MODIFIED: 2026-11-24 20:49:20 (UTC)
 ================================================================================
 
 .probe {
@@ -15080,6 +15124,7 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 }
 
 .status {
+    display: block;
     min-block-size: 1.4em;
     color: var(--fg);
     font-size: .9rem;
@@ -16205,10 +16250,10 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Islands/PostcardIsland.razor.css
-SIZE:     2.21 KB (2259 bytes)
-LINES:    139
-SHA256:   48d5a5a0133fc46d5adc79e31bf6ab13e16026e9c37115d042233b692cc5be9f
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     2.18 KB (2229 bytes)
+LINES:    138
+SHA256:   f7d9de4485a78f7e94d7f10d0718b8e4b14470b579b27a5de659d83d472a4a42
+MODIFIED: 2026-11-24 20:49:20 (UTC)
 ================================================================================
 
 .compose {
@@ -16239,9 +16284,8 @@ textarea:disabled {
 }
 
 .status {
+    display: block;
     flex: 1;
-    color: var(--danger);
-    font-size: .875rem;
 }
 
 .hint {
@@ -16354,13 +16398,14 @@ input[type="file"]:focus-visible + .pick {
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Islands/PostcardIsland.razor.js
-SIZE:     30.56 KB (31292 bytes)
-LINES:    932
-SHA256:   ab4922acbba1922da6bfeb44760abf5bf7340a417172c3185f1f407a752a7690
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     30.61 KB (31346 bytes)
+LINES:    933
+SHA256:   229c7185f51c84a8d5db3bc98039f2cb98a337d6cd766c24b55fd534167322d8
+MODIFIED: 2026-11-24 20:49:37 (UTC)
 ================================================================================
 
 import { LocalHistory, POSITION_OPTIONS, announce, collectMeta, countText, excessOf, isoOf, labelOf, metaElement, newestFirst, readShare, shareDefault, writeShare } from './BoardIsland.razor.js';
+import { showStatus } from '../../js/status.js';
 
 export const DB_NAME = 'chaos-postcards';
 export const DB_VERSION = 1;
@@ -16742,9 +16787,9 @@ class PostcardClient {
         await this.join();
     }
 
-    say(text) {
-        if (this.status && !this.disposed) {
-            this.status.textContent = text ?? '';
+    say(text, tone = null) {
+        if (!this.disposed) {
+            showStatus(this.status, text, tone);
         }
     }
 
@@ -16890,7 +16935,7 @@ class PostcardClient {
         if (this.button) {
             this.button.disabled = true;
         }
-        this.say(this.attachments.length > 0 ? 'Sending your postcard and its images.' : 'Sending your postcard.');
+        this.say(this.attachments.length > 0 ? 'Sending your postcard and its images.' : 'Sending your postcard.', 'note');
         let streams = [];
         try {
             const meta = await this.share.meta();
@@ -17465,10 +17510,10 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Islands/SlotIsland.razor.css
-SIZE:     8.01 KB (8207 bytes)
-LINES:    404
-SHA256:   ca6a87748dd5db648808583f6f87f6fdc0d2453e29fac190567d4148cd5d338e
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     8.03 KB (8227 bytes)
+LINES:    405
+SHA256:   94883c699610c0d1c8b5a6d0ee4b18e507cdf7de74e24f6dc62754fe6cee22d4
+MODIFIED: 2026-11-24 20:49:20 (UTC)
 ================================================================================
 
 .machine {
@@ -17723,6 +17768,7 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 }
 
 .status {
+    display: block;
     min-block-size: 1.4em;
     color: #ffe2a8;
     font-size: .9rem;
@@ -19195,10 +19241,10 @@ export function attach(dotnet) {
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Layout/MainLayout.razor
-SIZE:     2.15 KB (2199 bytes)
-LINES:    63
-SHA256:   4f3531b4517036029a5f54784f4e58eec8e4dc4f5d0e00c97db3ea33bbb2e3f6
-MODIFIED: 2026-11-19 10:22:33 (UTC)
+SIZE:     2.38 KB (2436 bytes)
+LINES:    64
+SHA256:   d42b1cd6eec0e6fe0e95b64080053a8e03a44e8d59ab0795cb0abe87e9728e8e
+MODIFIED: 2026-11-24 20:50:18 (UTC)
 ================================================================================
 
 @inherits LayoutComponentBase
@@ -19253,8 +19299,9 @@ MODIFIED: 2026-11-19 10:22:33 (UTC)
 
 <ReconnectBanner />
 
-<div id="blazor-error-ui" data-nosnippet>
-    Something went wrong on this page.
+<div id="blazor-error-ui" data-permanent="blazor-error-ui" data-nosnippet>
+    <span class="when-broken">Something went wrong on this page.</span>
+    <span class="when-refused">Live updates could not start in this tab. The server may be busy, or too many tabs are open on your network. Close a few and reload.</span>
     <a href="." class="reload">Reload</a>
     <span class="dismiss" aria-label="Dismiss">✕</span>
 </div>
@@ -19268,10 +19315,10 @@ MODIFIED: 2026-11-19 10:22:33 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Layout/MainLayout.razor.css
-SIZE:     2.75 KB (2815 bytes)
-LINES:    149
-SHA256:   a6a083281eb22eb463dc14cb108760d65d58bea04572c7b286072a91397bba4a
-MODIFIED: 2026-11-19 12:35:32 (UTC)
+SIZE:     2.93 KB (3000 bytes)
+LINES:    158
+SHA256:   1e0f7a3602ae1c698fdc9215fe482631e8336d5ed838808d692c8804357df260
+MODIFIED: 2026-11-24 20:50:18 (UTC)
 ================================================================================
 
 .site-header {
@@ -19410,6 +19457,15 @@ main:has(.wide) {
     color: var(--fg);
     background: var(--surface);
     border-block-start: 2px solid var(--danger);
+}
+
+#blazor-error-ui .when-refused,
+#blazor-error-ui[data-circuit="none"] .when-broken {
+    display: none;
+}
+
+#blazor-error-ui[data-circuit="none"] .when-refused {
+    display: inline;
 }
 
 #blazor-error-ui .dismiss {
@@ -22644,16 +22700,17 @@ section ::deep .facts .was {
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Pages/ListingPage.razor.js
-SIZE:     15.92 KB (16303 bytes)
-LINES:    443
-SHA256:   a2f8df5e543c023688fb98b641565500500297a2391d87c79d0e1cedb9c691b0
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     15.94 KB (16320 bytes)
+LINES:    442
+SHA256:   4cd9633064962f69833be32a58b2e902a8d99462d0e09418c321ba5bfbcfb087
+MODIFIED: 2026-11-24 20:49:37 (UTC)
 ================================================================================
 
 import { compareKeys, guessAddress, keyLabel, keyUrl, parseLink, providerLabel, providerOf } from '../../js/keys.js';
 import { ADDRESS_FIELDS, FIELDS, changedFields, displayValue, placeOf, summaryOf } from '../../js/fields.js';
 import { findListing } from '../../js/merge.js';
 import { readDraft, writeDraft } from '../../js/store.js';
+import { showStatus } from '../../js/status.js';
 import { RESULT_TEXT, STATUS_TEXT, isoOf, timeLabel } from './HomesPage.razor.js';
 
 export const COMMENT_MAX = 4000;
@@ -22998,9 +23055,7 @@ class ListingView {
         try {
             const outcome = await this.nest.post(draft);
             const ok = outcome.result === 'accepted' || outcome.result === 'exists';
-            if (output) {
-                output.textContent = ok ? '' : RESULT_TEXT[outcome.result] ?? RESULT_TEXT.invalid;
-            }
+            showStatus(output, ok ? '' : RESULT_TEXT[outcome.result] ?? RESULT_TEXT.invalid);
             return ok ? outcome : null;
         } finally {
             this.busy = false;
@@ -23016,7 +23071,7 @@ class ListingView {
         event.preventDefault();
         const text = this.commentText?.value ?? '';
         if (text.trim().length === 0) {
-            this.commentStatus.textContent = 'Write something first.';
+            showStatus(this.commentStatus, 'Write something first.');
             return;
         }
         const outcome = await this.send({ kind: 'comment', anchors: this.anchors(), text }, this.commentStatus);
@@ -23046,18 +23101,18 @@ class ListingView {
                     output.textContent = error;
                 }
             }
-            this.factsStatus.textContent = 'Fix the highlighted values.';
+            showStatus(this.factsStatus, 'Fix the highlighted values.');
             this.factsForm.elements.namedItem(errors[0].key)?.focus();
             return;
         }
         if (changes.length === 0) {
-            this.factsStatus.textContent = 'Nothing changed.';
+            showStatus(this.factsStatus, 'Nothing changed.', 'note');
             return;
         }
         const outcome = await this.send({ kind: 'fact', anchors: this.anchors(), fields: changes }, this.factsStatus);
         if (outcome) {
             this.dirty = false;
-            this.factsStatus.textContent = 'Saved.';
+            showStatus(this.factsStatus, 'Saved.', 'ok');
             this.render();
         }
     }
@@ -23066,17 +23121,17 @@ class ListingView {
         event.preventDefault();
         const parsed = parseLink(this.linkInput?.value ?? '');
         if (!parsed) {
-            this.linkStatus.textContent = 'Paste a full link that starts with https://';
+            showStatus(this.linkStatus, 'Paste a full link that starts with https://');
             return;
         }
         if (this.listing?.keys.includes(parsed.key)) {
-            this.linkStatus.textContent = 'This home already has that link.';
+            showStatus(this.linkStatus, 'This home already has that link.');
             return;
         }
         const outcome = await this.send({ kind: 'link', anchors: this.anchors(), url: parsed.url }, this.linkStatus);
         if (outcome) {
             this.linkInput.value = '';
-            this.linkStatus.textContent = 'Link added.';
+            showStatus(this.linkStatus, 'Link added.', 'ok');
         }
     }
 
@@ -24084,10 +24139,10 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Pages/SlotsPage.razor.css
-SIZE:     5.04 KB (5157 bytes)
-LINES:    259
-SHA256:   e5c9e8c3db1dfd4adda18523449c8d3e9f363398749241d4dcab758b3a0e062e
-MODIFIED: 2026-11-19 10:12:22 (UTC)
+SIZE:     5.05 KB (5172 bytes)
+LINES:    260
+SHA256:   e06003e2c9b9fd2bfe3a5a34bfc294202e09889bd2f4d5cc83f558f9ba461925
+MODIFIED: 2026-11-24 20:49:20 (UTC)
 ================================================================================
 
 .feed {
@@ -24234,6 +24289,7 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 
 .spins ::deep .badge {
     padding: .15rem .65rem;
+    border: 0;
     border-radius: 999px;
     color: var(--on-gold);
     background: var(--gold);
@@ -24637,6 +24693,28 @@ else
 
 
 ================================================================================
+FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/Backlog.razor.css
+SIZE:     0.15 KB (155 bytes)
+LINES:    12
+SHA256:   ef898c8f98c2abbd42c5ec22098e85562694c20b7bf80d79500e7a91b0409710
+MODIFIED: 2026-11-24 20:49:07 (UTC)
+================================================================================
+
+.filters {
+    margin: 1rem 0;
+}
+
+.filters > summary {
+    color: var(--link);
+    cursor: pointer;
+}
+
+.filters > form {
+    margin-block-start: .75rem;
+}
+
+
+================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/BoardView.razor
 SIZE:     5.19 KB (5317 bytes)
 LINES:    117
@@ -24760,6 +24838,95 @@ else
         _message = await Work.SetStatusAsync(_access!, number, Status, HttpContext.RequestAborted);
         await LoadAsync();
     }
+}
+
+
+================================================================================
+FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/BoardView.razor.css
+SIZE:     1.36 KB (1397 bytes)
+LINES:    79
+SHA256:   0bd52cf11486018efc5d285097d881dc7bd95c5a9fa97c7a32b175e3665ebf44
+MODIFIED: 2026-11-24 20:49:07 (UTC)
+================================================================================
+
+.board {
+    position: relative;
+    display: grid;
+    max-inline-size: 100%;
+    grid-auto-columns: minmax(16rem, 85vw);
+    grid-auto-flow: column;
+    gap: .75rem;
+    overflow-x: auto;
+    padding-block-end: .5rem;
+    scroll-snap-type: x mandatory;
+}
+
+@media (width >= 48rem) {
+    .board {
+        grid-auto-columns: minmax(15rem, 1fr);
+        scroll-snap-type: none;
+    }
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    min-block-size: 10rem;
+    padding: .6rem;
+    border-radius: var(--radius);
+    background: var(--surface);
+    scroll-snap-align: start;
+}
+
+.column h2 {
+    display: flex;
+    justify-content: space-between;
+    margin: 0 0 .25rem;
+    font-size: .95rem;
+}
+
+.column.drop-target {
+    outline: 2px dashed var(--ink);
+}
+
+.card {
+    position: relative;
+    display: grid;
+    gap: .35rem;
+    padding: .6rem .7rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--raised);
+}
+
+.card[draggable="true"] {
+    cursor: grab;
+}
+
+.card .card-title {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.card .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem .4rem;
+    align-items: center;
+    color: var(--muted);
+    font-size: .8rem;
+}
+
+.card form {
+    display: flex;
+    gap: .35rem;
+}
+
+.card select {
+    min-block-size: 2.1rem;
+    padding: .2rem .4rem;
+    font-size: .85rem;
 }
 
 
@@ -25067,6 +25234,81 @@ else
         "description" => "edited the description",
         _ => $"changed {change.Field} from {change.OldValue ?? "nothing"} to {change.NewValue ?? "nothing"}",
     };
+}
+
+
+================================================================================
+FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/ItemPage.razor.css
+SIZE:     1.06 KB (1090 bytes)
+LINES:    65
+SHA256:   f87d671538424c6411ee7ef82459ebecd0f1fc3f2655c5ca4d724f3092023925
+MODIFIED: 2026-11-24 20:49:07 (UTC)
+================================================================================
+
+.split {
+    display: grid;
+    gap: 1.5rem;
+}
+
+@media (width >= 64rem) {
+    .split {
+        grid-template-columns: minmax(0, 1fr) 20rem;
+        align-items: start;
+    }
+}
+
+.attachments {
+    display: grid;
+    gap: .5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.attachments li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem .75rem;
+}
+
+.attachments img {
+    max-inline-size: 8rem;
+    max-block-size: 6rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+
+.comments {
+    display: grid;
+    gap: .75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.comment {
+    padding: .75rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--raised);
+}
+
+.comment header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .25rem .75rem;
+    margin-block-end: .4rem;
+    color: var(--muted);
+    font-size: .85rem;
+}
+
+.history {
+    margin: 0;
+    padding-inline-start: 1.1rem;
+    color: var(--muted);
+    font-size: .875rem;
 }
 
 
@@ -25611,6 +25853,112 @@ else
 
 
 ================================================================================
+FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/SprintsPage.razor.css
+SIZE:     1.12 KB (1152 bytes)
+LINES:    96
+SHA256:   923294348871d097a9c6c0426b846df299a8ee00e481b38ff9fca50a5bf86932
+MODIFIED: 2026-11-24 20:49:07 (UTC)
+================================================================================
+
+.progress {
+    block-size: .5rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface);
+}
+
+.progress > span {
+    display: block;
+    block-size: 100%;
+    background: var(--ink);
+}
+
+.progress > .w-0 {
+    inline-size: 0%;
+}
+
+.progress > .w-5 {
+    inline-size: 5%;
+}
+
+.progress > .w-10 {
+    inline-size: 10%;
+}
+
+.progress > .w-15 {
+    inline-size: 15%;
+}
+
+.progress > .w-20 {
+    inline-size: 20%;
+}
+
+.progress > .w-25 {
+    inline-size: 25%;
+}
+
+.progress > .w-30 {
+    inline-size: 30%;
+}
+
+.progress > .w-35 {
+    inline-size: 35%;
+}
+
+.progress > .w-40 {
+    inline-size: 40%;
+}
+
+.progress > .w-45 {
+    inline-size: 45%;
+}
+
+.progress > .w-50 {
+    inline-size: 50%;
+}
+
+.progress > .w-55 {
+    inline-size: 55%;
+}
+
+.progress > .w-60 {
+    inline-size: 60%;
+}
+
+.progress > .w-65 {
+    inline-size: 65%;
+}
+
+.progress > .w-70 {
+    inline-size: 70%;
+}
+
+.progress > .w-75 {
+    inline-size: 75%;
+}
+
+.progress > .w-80 {
+    inline-size: 80%;
+}
+
+.progress > .w-85 {
+    inline-size: 85%;
+}
+
+.progress > .w-90 {
+    inline-size: 90%;
+}
+
+.progress > .w-95 {
+    inline-size: 95%;
+}
+
+.progress > .w-100 {
+    inline-size: 100%;
+}
+
+
+================================================================================
 FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/WorkHome.razor
 SIZE:     3.82 KB (3916 bytes)
 LINES:    113
@@ -25730,6 +26078,41 @@ else
 
         Navigation.NavigateTo($"work/{key}");
     }
+}
+
+
+================================================================================
+FILE:     src/MyBlazorPlayground.Web/Components/Pages/Work/WorkHome.razor.css
+SIZE:     0.49 KB (499 bytes)
+LINES:    25
+SHA256:   13053e4da26fbaca6cba8e15c275bd4632e81efbb2fa40fd807b10dfba90bf9d
+MODIFIED: 2026-11-24 20:49:07 (UTC)
+================================================================================
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: .75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.project-card {
+    display: grid;
+    gap: .35rem;
+    block-size: 100%;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    color: var(--fg);
+    background: var(--raised);
+    text-decoration: none;
+}
+
+.project-card strong {
+    color: var(--ink);
+    font-size: 1.1rem;
 }
 
 
@@ -26167,6 +26550,44 @@ MODIFIED: 2026-11-19 10:31:11 (UTC)
         : $"/work/{ProjectKey}/attachments";
 
     private string PreviewUrl => $"/work/{ProjectKey}/preview";
+}
+
+
+================================================================================
+FILE:     src/MyBlazorPlayground.Web/Components/Shared/RichEditor.razor.css
+SIZE:     0.45 KB (456 bytes)
+LINES:    28
+SHA256:   9dbfed1323bc180b08d7868cf94473d314636db165e468d2576f494233cebe4a
+MODIFIED: 2026-11-24 20:49:07 (UTC)
+================================================================================
+
+.editor {
+    display: grid;
+    gap: .4rem;
+}
+
+.editor textarea {
+    min-block-size: 10rem;
+    font-family: var(--mono);
+    font-size: .9rem;
+}
+
+.editor.dragging textarea {
+    outline: 2px dashed var(--ink);
+}
+
+.editor-preview {
+    min-block-size: 3rem;
+    padding: .75rem 1rem;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+}
+
+.editor-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
 }
 
 
@@ -27078,12 +27499,13 @@ internal sealed class ConnectionTracker(IOptions<SiteOptions> options)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Infrastructure/HubGuard.cs
-SIZE:     2.77 KB (2836 bytes)
-LINES:    74
-SHA256:   fc1b5fb43abb8d33bd573f2bba5fb02718a549a9b6d18434506cbbec9d993913
-MODIFIED: 2026-11-19 10:12:38 (UTC)
+SIZE:     3.03 KB (3098 bytes)
+LINES:    81
+SHA256:   1f0b6784909dd03810445d194708ecca4c71645b519eee405e86028e2c86d768
+MODIFIED: 2026-11-24 20:50:39 (UTC)
 ================================================================================
 
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.Extensions.Options;
 
 namespace MyBlazorPlayground.Web.Infrastructure;
@@ -27091,6 +27513,12 @@ namespace MyBlazorPlayground.Web.Infrastructure;
 internal static partial class HubGuard
 {
     public static readonly PathString HubPath = new("/_blazor");
+
+    public static void ConfigureConnection(HttpConnectionDispatcherOptions connection)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        connection.Transports = HttpTransportType.WebSockets;
+    }
 
     public static IApplicationBuilder UseHubGuard(this IApplicationBuilder app)
     {
@@ -27658,10 +28086,10 @@ internal sealed record ServerTime(long UnixMs, int OffsetMinutes)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Infrastructure/SiteOptions.cs
-SIZE:     1.04 KB (1060 bytes)
+SIZE:     1.04 KB (1061 bytes)
 LINES:    32
-SHA256:   4863e69f4faa3a3ce7991d00936f67d5a33fe6961e4ce17d41a08186eabeaa4f
-MODIFIED: 2026-11-19 10:21:58 (UTC)
+SHA256:   b5377806f393bea4595a36a584a949e6d8e49fae776e90a4a2b58d93bc9addc1
+MODIFIED: 2026-11-24 20:50:39 (UTC)
 ================================================================================
 
 namespace MyBlazorPlayground.Web.Infrastructure;
@@ -27678,9 +28106,9 @@ internal sealed class SiteOptions
 
     public IList<string> AllowedOrigins { get; } = [];
 
-    public int MaxConnectionsPerClient { get; set; } = 8;
+    public int MaxConnectionsPerClient { get; set; } = 64;
 
-    public int MaxConnections { get; set; } = 200;
+    public int MaxConnections { get; set; } = 400;
 
     public int RequestsPerSecond { get; set; } = 20;
 
@@ -30212,10 +30640,10 @@ internal sealed class StartupTasks(MigrationRunner migrations, IEnumerable<IStat
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/Program.cs
-SIZE:     1.82 KB (1865 bytes)
-LINES:    60
-SHA256:   f378f701191525b57c3639ddae846375f51e70284d2f5a9861cc73d92abd1ac1
-MODIFIED: 2026-11-19 10:47:45 (UTC)
+SIZE:     1.91 KB (1953 bytes)
+LINES:    64
+SHA256:   e51d62d6d2792ead507eb54cf6c7db341dff021ff92af3e5dae9c31cd5513737
+MODIFIED: 2026-11-24 20:50:39 (UTC)
 ================================================================================
 
 using MyBlazorPlayground.Web.Chaos;
@@ -30273,7 +30701,11 @@ app.MapAccountEndpoints();
 app.MapWorkEndpoints();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode(server => server.DisableWebSocketCompression = true);
+    .AddInteractiveServerRenderMode(server =>
+    {
+        server.DisableWebSocketCompression = true;
+        server.ConfigureConnection = HubGuard.ConfigureConnection;
+    });
 
 await app.RunAsync();
 
@@ -31171,10 +31603,10 @@ MODIFIED: 2026-11-19 10:52:41 (UTC)
 
 ================================================================================
 FILE:     src/MyBlazorPlayground.Web/wwwroot/app.css
-SIZE:     15.30 KB (15672 bytes)
-LINES:    959
-SHA256:   c7c3783c2558b2428a888f3ca56d6cad5972e4d80514526b4e4dd7ceba196948
-MODIFIED: 2026-11-19 12:36:45 (UTC)
+SIZE:     10.77 KB (11024 bytes)
+LINES:    656
+SHA256:   4db10f7668da7ed5a24e3998c963c839df5a7573c93f1df8828e47736eaad0e7
+MODIFIED: 2026-11-24 20:49:12 (UTC)
 ================================================================================
 
 :root {
@@ -31475,6 +31907,14 @@ th {
     display: none;
 }
 
+.status[data-tone="ok"] {
+    color: var(--ok);
+}
+
+.status[data-tone="note"] {
+    color: var(--muted);
+}
+
 .sync {
     margin: 0;
     color: var(--muted);
@@ -31747,304 +32187,6 @@ th {
     max-inline-size: 100%;
 }
 
-.board {
-    position: relative;
-    display: grid;
-    max-inline-size: 100%;
-    grid-auto-columns: minmax(16rem, 85vw);
-    grid-auto-flow: column;
-    gap: .75rem;
-    overflow-x: auto;
-    padding-block-end: .5rem;
-    scroll-snap-type: x mandatory;
-}
-
-@media (width >= 48rem) {
-    .board {
-        grid-auto-columns: minmax(15rem, 1fr);
-        scroll-snap-type: none;
-    }
-}
-
-.column {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-    min-block-size: 10rem;
-    padding: .6rem;
-    border-radius: var(--radius);
-    background: var(--surface);
-    scroll-snap-align: start;
-}
-
-.column h2 {
-    display: flex;
-    justify-content: space-between;
-    margin: 0 0 .25rem;
-    font-size: .95rem;
-}
-
-.column.drop-target {
-    outline: 2px dashed var(--ink);
-}
-
-.card {
-    position: relative;
-    display: grid;
-    gap: .35rem;
-    padding: .6rem .7rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--raised);
-}
-
-.card[draggable="true"] {
-    cursor: grab;
-}
-
-.card .card-title {
-    font-weight: 600;
-    text-decoration: none;
-}
-
-.card .meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .25rem .4rem;
-    align-items: center;
-    color: var(--muted);
-    font-size: .8rem;
-}
-
-.card form {
-    display: flex;
-    gap: .35rem;
-}
-
-.card select {
-    min-block-size: 2.1rem;
-    padding: .2rem .4rem;
-    font-size: .85rem;
-}
-
-.progress {
-    block-size: .5rem;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--surface);
-}
-
-.progress > span {
-    display: block;
-    block-size: 100%;
-    background: var(--ink);
-}
-
-.progress > .w-0 {
-    inline-size: 0%;
-}
-
-.progress > .w-5 {
-    inline-size: 5%;
-}
-
-.progress > .w-10 {
-    inline-size: 10%;
-}
-
-.progress > .w-15 {
-    inline-size: 15%;
-}
-
-.progress > .w-20 {
-    inline-size: 20%;
-}
-
-.progress > .w-25 {
-    inline-size: 25%;
-}
-
-.progress > .w-30 {
-    inline-size: 30%;
-}
-
-.progress > .w-35 {
-    inline-size: 35%;
-}
-
-.progress > .w-40 {
-    inline-size: 40%;
-}
-
-.progress > .w-45 {
-    inline-size: 45%;
-}
-
-.progress > .w-50 {
-    inline-size: 50%;
-}
-
-.progress > .w-55 {
-    inline-size: 55%;
-}
-
-.progress > .w-60 {
-    inline-size: 60%;
-}
-
-.progress > .w-65 {
-    inline-size: 65%;
-}
-
-.progress > .w-70 {
-    inline-size: 70%;
-}
-
-.progress > .w-75 {
-    inline-size: 75%;
-}
-
-.progress > .w-80 {
-    inline-size: 80%;
-}
-
-.progress > .w-85 {
-    inline-size: 85%;
-}
-
-.progress > .w-90 {
-    inline-size: 90%;
-}
-
-.progress > .w-95 {
-    inline-size: 95%;
-}
-
-.progress > .w-100 {
-    inline-size: 100%;
-}
-
-.editor {
-    display: grid;
-    gap: .4rem;
-}
-
-.editor textarea {
-    min-block-size: 10rem;
-    font-family: var(--mono);
-    font-size: .9rem;
-}
-
-.editor.dragging textarea {
-    outline: 2px dashed var(--ink);
-}
-
-.editor-preview {
-    min-block-size: 3rem;
-    padding: .75rem 1rem;
-    border: 1px dashed var(--line);
-    border-radius: var(--radius);
-}
-
-.editor-bar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: .5rem;
-}
-
-.attachments {
-    display: grid;
-    gap: .5rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.attachments li {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: .25rem .75rem;
-}
-
-.attachments img {
-    max-inline-size: 8rem;
-    max-block-size: 6rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-}
-
-.comments {
-    display: grid;
-    gap: .75rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.comment {
-    padding: .75rem 1rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--raised);
-}
-
-.comment header {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: .25rem .75rem;
-    margin-block-end: .4rem;
-    color: var(--muted);
-    font-size: .85rem;
-}
-
-.history {
-    margin: 0;
-    padding-inline-start: 1.1rem;
-    color: var(--muted);
-    font-size: .875rem;
-}
-
-.split {
-    display: grid;
-    gap: 1.5rem;
-}
-
-@media (width >= 64rem) {
-    .split {
-        grid-template-columns: minmax(0, 1fr) 20rem;
-        align-items: start;
-    }
-}
-
-.cards-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
-    gap: .75rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.project-card {
-    display: grid;
-    gap: .35rem;
-    block-size: 100%;
-    padding: 1rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    color: var(--fg);
-    background: var(--raised);
-    text-decoration: none;
-}
-
-.project-card strong {
-    color: var(--ink);
-    font-size: 1.1rem;
-}
-
 .danger-zone {
     margin-block-start: 2.5rem;
     padding: 1rem;
@@ -32055,19 +32197,6 @@ th {
 .danger-zone h2 {
     margin-block-start: 0;
     color: var(--danger);
-}
-
-.filters {
-    margin: 1rem 0;
-}
-
-.filters > summary {
-    color: var(--link);
-    cursor: pointer;
-}
-
-.filters > form {
-    margin-block-start: .75rem;
 }
 
 .code-input {
@@ -32924,6 +33053,30 @@ export function matches(listing, query) {
         .join(' ')
         .toLowerCase();
     return needle.split(/\s+/).every(part => haystack.includes(part));
+}
+
+
+================================================================================
+FILE:     src/MyBlazorPlayground.Web/wwwroot/js/status.js
+SIZE:     0.34 KB (351 bytes)
+LINES:    14
+SHA256:   c1b2264faa909650266c2a5abaa54cd97c833989bd373b938a206c0ae9411f38
+MODIFIED: 2026-11-24 20:49:37 (UTC)
+================================================================================
+
+export const TONES = Object.freeze(['ok', 'note']);
+
+export function showStatus(element, text, tone = null) {
+    if (!element) {
+        return;
+    }
+    const value = text ?? '';
+    element.textContent = value;
+    if (value && TONES.includes(tone)) {
+        element.dataset.tone = tone;
+    } else {
+        delete element.dataset.tone;
+    }
 }
 
 
@@ -36366,15 +36519,16 @@ public sealed class ImageSanitizerTests
 
 ================================================================================
 FILE:     tests/MyBlazorPlayground.Web.Tests/Chaos/InfrastructureTests.cs
-SIZE:     6.52 KB (6681 bytes)
-LINES:    183
-SHA256:   22c45cd1d2b65e1c335727cf1cf2d211b740d3a3c0c7a875ef4d31ab7ad66a23
-MODIFIED: 2026-11-19 12:33:11 (UTC)
+SIZE:     6.85 KB (7018 bytes)
+LINES:    197
+SHA256:   8fb5a13dc5d154e854ae7c4190b7102ebeea222a057c9010c0d64f41b0dec459
+MODIFIED: 2026-11-24 20:50:39 (UTC)
 ================================================================================
 
 using System.Net;
 using MyBlazorPlayground.Web.Infrastructure;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.Connections;
 
 namespace MyBlazorPlayground.Web.Tests.Chaos;
 
@@ -36447,6 +36601,19 @@ public sealed class ConnectionTrackerTests
         third?.Dispose();
         fourth?.Dispose();
         Assert.Equal(0, tracker.Total);
+    }
+}
+
+public sealed class HubGuardTests
+{
+    [Fact]
+    public void OffersOnlyWebSockets()
+    {
+        var connection = new HttpConnectionDispatcherOptions();
+
+        HubGuard.ConfigureConnection(connection);
+
+        Assert.Equal(HttpTransportType.WebSockets, connection.Transports);
     }
 }
 
@@ -39923,14 +40090,15 @@ MODIFIED: 2026-11-19 10:12:22 (UTC)
 
 ================================================================================
 FILE:     tests/js/chaos/app.test.js
-SIZE:     3.30 KB (3381 bytes)
-LINES:    97
-SHA256:   57a4b2220e0fc14f788140b53e715ba5613c13067e6712f76ecb728c29117acd
-MODIFIED: 2026-11-19 10:37:40 (UTC)
+SIZE:     4.14 KB (4242 bytes)
+LINES:    120
+SHA256:   a120dae9fb6087a5e14a1ff3ee5581ae158aeb768c2a3ba8ee9ca37dc66cc77e
+MODIFIED: 2026-11-24 20:50:55 (UTC)
 ================================================================================
 
 import { describe, expect, it } from 'vitest';
 import {
+    ERROR_UI_ID,
     MAX_RETRIES,
     THEME_KEY,
     better,
@@ -39939,6 +40107,7 @@ import {
     sample,
     storedTheme,
     toggledTheme,
+    trackCircuit,
     uncertainty,
     untilNextSecond,
     zoneLabel,
@@ -40024,6 +40193,27 @@ describe('server clock', () => {
         expect(untilNextSecond(1000)).toBe(1005);
         expect(untilNextSecond(1999)).toBe(6);
         expect(untilNextSecond(1500.7)).toBe(505);
+    });
+});
+
+describe('trackCircuit', () => {
+    function page() {
+        const attributes = new Map();
+        const element = { setAttribute: (name, value) => attributes.set(name, value) };
+        return { attributes, doc: { getElementById: id => (id === ERROR_UI_ID ? element : null) } };
+    }
+
+    it('marks the error message as a connection problem until a circuit opens', () => {
+        const { attributes, doc } = page();
+        const handler = trackCircuit(doc);
+        expect(attributes.get('data-circuit')).toBe('none');
+        handler.onCircuitOpened();
+        expect(attributes.get('data-circuit')).toBe('open');
+    });
+
+    it('works without the error message', () => {
+        const handler = trackCircuit({ getElementById: () => null });
+        expect(() => handler.onCircuitOpened()).not.toThrow();
     });
 });
 
@@ -42201,6 +42391,55 @@ MODIFIED: 2026-11-19 10:38:31 (UTC)
 
 
 ================================================================================
+FILE:     tests/js/shared/status.test.js
+SIZE:     1.38 KB (1418 bytes)
+LINES:    39
+SHA256:   bee367864ee2654e6465bc45f32c44a103ca38f39fd9c7587d02e0ce62852bb4
+MODIFIED: 2026-11-24 20:50:50 (UTC)
+================================================================================
+
+import { describe, expect, it } from 'vitest';
+import { TONES, showStatus } from '../../../src/MyBlazorPlayground.Web/wwwroot/js/status.js';
+
+function output() {
+    return { textContent: 'old', dataset: {} };
+}
+
+describe('showStatus', () => {
+    it('shows problems without a tone', () => {
+        const element = output();
+        element.dataset.tone = 'ok';
+        showStatus(element, 'Fix the highlighted values.');
+        expect(element.textContent).toBe('Fix the highlighted values.');
+        expect(element.dataset.tone).toBeUndefined();
+    });
+
+    it('marks good news and notes', () => {
+        const element = output();
+        showStatus(element, 'Saved.', 'ok');
+        expect(element.dataset.tone).toBe('ok');
+        showStatus(element, 'Nothing changed.', 'note');
+        expect(element.dataset.tone).toBe('note');
+    });
+
+    it('ignores unknown tones and clears with the text', () => {
+        const element = output();
+        showStatus(element, 'Hello', 'shout');
+        expect(element.dataset.tone).toBeUndefined();
+        showStatus(element, 'Saved.', 'ok');
+        showStatus(element, null, 'ok');
+        expect(element.textContent).toBe('');
+        expect(element.dataset.tone).toBeUndefined();
+    });
+
+    it('tolerates a missing element', () => {
+        expect(() => showStatus(null, 'Saved.', 'ok')).not.toThrow();
+        expect(TONES).toEqual(['ok', 'note']);
+    });
+});
+
+
+================================================================================
 FILE:     tests/js/vitest.config.mjs
 SIZE:     0.90 KB (918 bytes)
 LINES:    31
@@ -42321,9 +42560,9 @@ describe('enhance', () => {
 
 
 ===============================================================================
-EXPORT COMPLETED (UTC): 2026-11-24 20:39:46
-Total Files Exported:   388
-Total Source Size:      1.29 MB (1348116 bytes)
+EXPORT COMPLETED (UTC): 2026-11-24 21:31:36
+Total Files Exported:   397
+Total Source Size:      1.29 MB (1354759 bytes)
 Output File:            /home/kushal/src/dotnet/myblazorplayground/docs/llm/dump.txt
 ===============================================================================
-DUMP SHA256 (of all lines above this one): a469ab517ef9f4ccdcbd0afa44c59d17e4741f0ab6fde5dc6701761c9fe120a7
+DUMP SHA256 (of all lines above this one): ae8e686a7193ec53bfc2e5d78eece129001dd8065b4860a48834947a47cff54c
