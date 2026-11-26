@@ -1,8 +1,8 @@
 <Project>
 
   <ItemGroup Label="Runtime">
-    <PackageVersion Include="Dapper" Version="2.1.89" />
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Dapper" Version="2.1.100" />
+    <PackageVersion Include="Npgsql" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
