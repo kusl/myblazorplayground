@@ -1,8 +1,8 @@
 ===============================================================================
 PROJECT EXPORT
-Generated (UTC): 2026-11-27 13:56:00
+Generated (UTC): 2026-11-27 13:57:37
 Project Path:    /home/kushal/src/dotnet/myblazorplayground
-Git Commit:      0f2f3eee52893278c3ffaee292c6357d87a97971
+Git Commit:      209918a11e074102a1880a161a8fbb55730cc39b
 Git Branch:      main
 Git Dirty:       no
 .NET SDK:        11.0.100
@@ -786,17 +786,17 @@ MODIFIED: 2026-11-19 10:12:55 (UTC)
 
 ================================================================================
 FILE:     Directory.Packages.props
-SIZE:     0.28 KB (284 bytes)
+SIZE:     0.28 KB (285 bytes)
 LINES:    12
-SHA256:   015011e7f785fa1bc1cb27bfb893c99c81c63f7905b942a61bc1962a5696eb2e
-MODIFIED: 2026-11-19 10:12:55 (UTC)
+SHA256:   367aa47a48c042f270b5584bb1f4c45d9eb0c869303e10804848fd595d21766f
+MODIFIED: 2026-11-27 13:57:15 (UTC)
 ================================================================================
 
 <Project>
 
   <ItemGroup Label="Runtime">
-    <PackageVersion Include="Dapper" Version="2.1.89" />
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Dapper" Version="2.1.100" />
+    <PackageVersion Include="Npgsql" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
@@ -42560,9 +42560,9 @@ describe('enhance', () => {
 
 
 ===============================================================================
-EXPORT COMPLETED (UTC): 2026-11-27 13:56:04
+EXPORT COMPLETED (UTC): 2026-11-27 13:57:41
 Total Files Exported:   397
-Total Source Size:      1.29 MB (1354759 bytes)
+Total Source Size:      1.29 MB (1354760 bytes)
 Output File:            /home/kushal/src/dotnet/myblazorplayground/docs/llm/dump.txt
 ===============================================================================
-DUMP SHA256 (of all lines above this one): 564523351cad337b59aca0bfeee860f4532fb032359b52ad905a7b3f8a2fe6b6
+DUMP SHA256 (of all lines above this one): 84a5662ebb639dc01318077e3f6d44bd5001f4c33611b35df19b32648b47b4fb
