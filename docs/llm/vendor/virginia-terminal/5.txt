@@ -1,0 +1,123 @@
+kushal@fedora:~/src/bash$ ssh virginia
+Linux virginia 6.12.118+deb13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.12.118-1 (2026-11-20) x86_64
+
+The programs included with the Debian GNU/Linux system are free software;
+the exact distribution terms for each program are described in the
+individual files in /usr/share/doc/*/copyright.
+
+Debian GNU/Linux comes with ABSOLUTELY NO WARRANTY, to the extent
+permitted by applicable law.
+Last login: Tue Nov 24 17:06:01 2026 from 100.105.139.82
+kushal@virginia:~$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh status
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.049s
+user	0m0.001s
+sys	0m0.021s
+remote: Enumerating objects: 28, done.
+remote: Counting objects: 100% (28/28), done.
+remote: Compressing objects: 100% (14/14), done.
+remote: Total 17 (delta 10), reused 8 (delta 3), pack-reused 0 (from 0)
+Unpacking objects: 100% (17/17), 8.06 KiB | 515.00 KiB/s, done.
+From https://github.com/kusl/myblazorplayground
+   f3f7f10..f3a7385  main                                            -> origin/main
+ * [new branch]      dependabot/npm_and_yarn/tests/js/npm-a3488e8a54 -> origin/dependabot/npm_and_yarn/tests/js/npm-a3488e8a54
+ * [new branch]      dependabot/nuget/nuget-7c59186afd               -> origin/dependabot/nuget/nuget-7c59186afd
+
+real	0m0.462s
+user	0m0.138s
+sys	0m0.048s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branches:
+    dependabot/npm_and_yarn/tests/js/npm-a3488e8a54 tracked
+    dependabot/nuget/nuget-7c59186afd               tracked
+    main                                            tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (local out of date)
+
+real	0m0.278s
+user	0m0.095s
+sys	0m0.032s
+On branch main
+Your branch is behind 'origin/main' by 1 commit, and can be fast-forwarded.
+  (use "git pull" to update your local branch)
+
+nothing to commit, working tree clean
+Updating f3f7f10..f3a7385
+Fast-forward
+ docs/llm/vendor/terminal/{7,txt => 7.txt} |   0
+ docs/llm/vendor/virginia-terminal/4.txt   | 348 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 348 insertions(+)
+ rename docs/llm/vendor/terminal/{7,txt => 7.txt} (100%)
+ create mode 100644 docs/llm/vendor/virginia-terminal/4.txt
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+CONTAINER ID  IMAGE                                    COMMAND     CREATED     STATUS                  PORTS                     NAMES
+ec5d89f0ff00  docker.io/library/postgres:18-alpine     postgres    2 days ago  Exited (0) 7 hours ago  127.0.0.1:5433->5432/tcp  myblazorplayground_postgres_1
+5da587fd7646  localhost/myblazorplayground-web:latest              2 days ago  Exited (0) 7 hours ago  127.0.0.1:8090->8080/tcp  myblazorplayground_web_1
+CONTAINER ID  IMAGE       COMMAND     CREATED     STATUS      PORTS       NAMES
+[instance] warning: site: not answering at http://127.0.0.1:8090
+[instance] tunnel: https://tires-coat-watch-promptly.trycloudflare.com
+
+real	0m1.578s
+user	0m0.645s
+sys	0m0.313s
+kushal@virginia:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh down
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+
+real	0m0.011s
+user	0m0.007s
+sys	0m0.004s
+
+real	0m0.297s
+user	0m0.109s
+sys	0m0.037s
+* remote origin
+  Fetch URL: https://github.com/kusl/myblazorplayground
+  Push  URL: https://github.com/kusl/myblazorplayground
+  HEAD branch: main
+  Remote branches:
+    dependabot/npm_and_yarn/tests/js/npm-a3488e8a54 tracked
+    dependabot/nuget/nuget-7c59186afd               tracked
+    main                                            tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (up to date)
+
+real	0m0.267s
+user	0m0.076s
+sys	0m0.043s
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+Already up to date.
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+myblazorplayground_web_1
+myblazorplayground_postgres_1
+myblazorplayground_web_1
+myblazorplayground_postgres_1
+6d614624ea431732e5a754ea484090eeae298a5677750d7881011f85020212af
+myblazorplayground_default
+
+real	0m1.171s
+user	0m0.818s
+sys	0m0.306s
+kushal@virginia:~/src/dotnet/myblazorplayground$ cd ~/src/dotnet/myblazorplayground; time git status; time git fetch; time git remote show origin; git status; git pull; git status; time bash scripts/instance.sh up
